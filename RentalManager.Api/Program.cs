@@ -112,7 +112,12 @@ if (app.Configuration.GetValue("Database:InitializeOnStartup", false))
 {
     await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<RentalDbContext>();
-    await db.Database.MigrateAsync();
+    // migration ทั้งหมดเขียนเป็น T-SQL จึงใช้ได้เฉพาะ SQL Server
+    // โหมด SQLite สร้าง schema จากโมเดลตรงๆ เพราะมีไว้ดูหน้าจอเท่านั้น ไม่ได้เก็บข้อมูลจริง
+    if (string.Equals(app.Configuration["Database:Provider"], "Sqlite", StringComparison.OrdinalIgnoreCase))
+        await db.Database.EnsureCreatedAsync();
+    else
+        await db.Database.MigrateAsync();
 }
 
 // สลิปคือหลักฐานการชำระเงิน ถ้าเขียนโฟลเดอร์ไม่ได้ต้องรู้ตั้งแต่ตอนสตาร์ต

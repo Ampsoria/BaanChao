@@ -18,24 +18,42 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
     public DbSet<TenantLinkCode> TenantLinkCodes => Set<TenantLinkCode>();
     public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
 
+    /// <summary>
+    /// true เมื่อรันบน SQLite ซึ่งใช้เฉพาะโหมดดูหน้าจอบนเครื่อง dev
+    /// ของจริงเป็น SQL Server เสมอ — ดู README หัวข้อ "ลองรันแบบไม่ติดตั้งอะไร"
+    /// </summary>
+    private bool IsSqlite => Database.ProviderName?.EndsWith(".Sqlite", StringComparison.Ordinal) == true;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        ConfigureRoom(modelBuilder);
-        ConfigureTenant(modelBuilder);
-        ConfigureRates(modelBuilder);
-        ConfigureMeterReading(modelBuilder);
-        ConfigureInvoice(modelBuilder);
-        ConfigurePayment(modelBuilder);
-        ConfigureAuditLog(modelBuilder);
-        ConfigureSettlement(modelBuilder);
-        ConfigureMessaging(modelBuilder);
+        var sqlite = IsSqlite;
+        ConfigureRoom(modelBuilder, sqlite);
+        ConfigureTenant(modelBuilder, sqlite);
+        ConfigureRates(modelBuilder, sqlite);
+        ConfigureMeterReading(modelBuilder, sqlite);
+        ConfigureInvoice(modelBuilder, sqlite);
+        ConfigurePayment(modelBuilder, sqlite);
+        ConfigureAuditLog(modelBuilder, sqlite);
+        ConfigureSettlement(modelBuilder, sqlite);
+        ConfigureMessaging(modelBuilder, sqlite);
         Seed(modelBuilder);
     }
 
-    private static void ConfigureRoom(ModelBuilder modelBuilder)
+    /// <summary>เวลาปัจจุบันแบบ UTC ตามไวยากรณ์ของแต่ละ provider</summary>
+    private static string UtcNowSql(bool sqlite) => sqlite ? "CURRENT_TIMESTAMP" : "SYSUTCDATETIME()";
+
+    /// <summary>
+    /// SQLite ไม่มีชนิด decimal จริง EF จึงเก็บเป็น TEXT
+    /// การเทียบตัวเลขใน CHECK constraint เลยกลายเป็นการเทียบสตริง ('0.0' = 0 ได้ false
+    /// และ '9.0' >= '100.0' ได้ true) ต้อง cast ก่อนเทียบ
+    /// บน SQL Server คืนค่าเดิมไม่แตะ เพื่อให้สตริงตรงกับ migration snapshot เป๊ะ
+    /// </summary>
+    private static string Money(bool sqlite, string column) => sqlite ? $"CAST({column} AS REAL)" : column;
+
+    private static void ConfigureRoom(ModelBuilder modelBuilder, bool sqlite)
     {
         var entity = modelBuilder.Entity<Room>();
-        entity.ToTable("Room", table => table.HasCheckConstraint("CK_Room_Rent", "[MonthlyRent] >= 0"));
+        entity.ToTable("Room", table => table.HasCheckConstraint("CK_Room_Rent", $"{Money(sqlite, "[MonthlyRent]")} >= 0"));
         entity.HasKey(x => x.RoomId);
         entity.Property(x => x.RoomNumber).HasMaxLength(10).IsRequired();
         entity.Property(x => x.MonthlyRent).HasPrecision(10, 2);
@@ -44,12 +62,12 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         entity.HasIndex(x => x.PayeeCents).IsUnique();
     }
 
-    private static void ConfigureTenant(ModelBuilder modelBuilder)
+    private static void ConfigureTenant(ModelBuilder modelBuilder, bool sqlite)
     {
         var entity = modelBuilder.Entity<Tenant>();
         entity.ToTable("Tenant", table =>
         {
-            table.HasCheckConstraint("CK_Tenant_Deposit", "[DepositAmount] >= 0");
+            table.HasCheckConstraint("CK_Tenant_Deposit", $"{Money(sqlite, "[DepositAmount]")} >= 0");
             table.HasCheckConstraint("CK_Tenant_Channel", "[PreferredChannel] IN ('Line','Paper')");
         });
         entity.HasKey(x => x.TenantId);
@@ -63,12 +81,12 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         entity.HasOne(x => x.Room).WithMany(x => x.Tenants).HasForeignKey(x => x.RoomId).OnDelete(DeleteBehavior.Restrict);
     }
 
-    private static void ConfigureRates(ModelBuilder modelBuilder)
+    private static void ConfigureRates(ModelBuilder modelBuilder, bool sqlite)
     {
         var rate = modelBuilder.Entity<UtilityRate>();
         rate.ToTable("UtilityRate", table => table.HasCheckConstraint(
             "CK_UtilityRate_NonNegative",
-            "[WaterPerUnit] >= 0 AND [ElectricPerUnit] >= 0 AND [TrashPerMonth] >= 0"));
+            $"{Money(sqlite, "[WaterPerUnit]")} >= 0 AND {Money(sqlite, "[ElectricPerUnit]")} >= 0 AND {Money(sqlite, "[TrashPerMonth]")} >= 0"));
         rate.HasKey(x => x.RateId);
         rate.HasIndex(x => x.EffectiveFrom).IsUnique();
         rate.Property(x => x.WaterPerUnit).HasPrecision(10, 2);
@@ -80,7 +98,7 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         policy.ToTable("BillingPolicy", table =>
         {
             table.HasCheckConstraint("CK_LateFeeType", "[LateFeeType] IN ('None','PerDay','Flat')");
-            table.HasCheckConstraint("CK_LateFee_NonNegative", "[LateFeeAmount] >= 0 AND ([LateFeeCap] IS NULL OR [LateFeeCap] >= 0)");
+            table.HasCheckConstraint("CK_LateFee_NonNegative", $"{Money(sqlite, "[LateFeeAmount]")} >= 0 AND ([LateFeeCap] IS NULL OR {Money(sqlite, "[LateFeeCap]")} >= 0)");
         });
         policy.HasKey(x => x.PolicyId);
         policy.HasIndex(x => x.EffectiveFrom).IsUnique();
@@ -90,13 +108,13 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         policy.Property(x => x.Note).HasMaxLength(200);
     }
 
-    private static void ConfigureMeterReading(ModelBuilder modelBuilder)
+    private static void ConfigureMeterReading(ModelBuilder modelBuilder, bool sqlite)
     {
         var entity = modelBuilder.Entity<MeterReading>();
         entity.ToTable("MeterReading", table =>
         {
-            table.HasCheckConstraint("CK_Water_NotNegative", "[WaterCurrent] >= [WaterPrev]");
-            table.HasCheckConstraint("CK_Electric_NotNegative", "[ElectricCurrent] >= [ElectricPrev]");
+            table.HasCheckConstraint("CK_Water_NotNegative", $"{Money(sqlite, "[WaterCurrent]")} >= {Money(sqlite, "[WaterPrev]")}");
+            table.HasCheckConstraint("CK_Electric_NotNegative", $"{Money(sqlite, "[ElectricCurrent]")} >= {Money(sqlite, "[ElectricPrev]")}");
         });
         entity.HasKey(x => x.ReadingId);
         entity.Property(x => x.BillingPeriod).HasColumnType("char(7)").IsRequired();
@@ -112,29 +130,36 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         entity.HasOne(x => x.Room).WithMany(x => x.MeterReadings).HasForeignKey(x => x.RoomId).OnDelete(DeleteBehavior.Restrict);
     }
 
-    private static void ConfigureInvoice(ModelBuilder modelBuilder)
+    private static void ConfigureInvoice(ModelBuilder modelBuilder, bool sqlite)
     {
         var entity = modelBuilder.Entity<Invoice>();
         entity.ToTable("Invoice", table =>
         {
             table.HasCheckConstraint("CK_Invoice_Days", "[DaysCharged] > 0 AND [DaysCharged] <= [DaysInPeriod]");
-            table.HasCheckConstraint("CK_Invoice_Units", "[WaterUnits] >= 0 AND [ElectricUnits] >= 0");
+            table.HasCheckConstraint("CK_Invoice_Units", $"{Money(sqlite, "[WaterUnits]")} >= 0 AND {Money(sqlite, "[ElectricUnits]")} >= 0");
             // ค่าน้ำ-ค่าไฟเก็บย้อนหลังเสมอ: UtilityPeriod ต้องเป็นเดือนก่อน BillingPeriod พอดี
             table.HasCheckConstraint(
                 "CK_Invoice_UtilityPeriod",
-                "[UtilityPeriod] IS NULL OR [UtilityPeriod] = CONVERT(char(7), "
-                + "DATEADD(MONTH, -1, CONVERT(date, [BillingPeriod] + '-01', 126)), 126)");
+                sqlite
+                    ? "[UtilityPeriod] IS NULL OR [UtilityPeriod] = "
+                      + "substr(date([BillingPeriod] || '-01', '-1 month'), 1, 7)"
+                    : "[UtilityPeriod] IS NULL OR [UtilityPeriod] = CONVERT(char(7), "
+                      + "DATEADD(MONTH, -1, CONVERT(date, [BillingPeriod] + '-01', 126)), 126)");
             // ไม่มีเลขมิเตอร์ของงวดก่อน = ห้ามมีหน่วยน้ำ-ไฟบนบิล
             table.HasCheckConstraint(
                 "CK_Invoice_UtilityUnits",
-                "[UtilityPeriod] IS NOT NULL OR ([WaterUnits] = 0 AND [ElectricUnits] = 0)");
+                $"[UtilityPeriod] IS NOT NULL OR ({Money(sqlite, "[WaterUnits]")} = 0 AND {Money(sqlite, "[ElectricUnits]")} = 0)");
         });
         entity.HasKey(x => x.InvoiceId);
         entity.Property(x => x.BillingPeriod).HasColumnType("char(7)").IsRequired();
         entity.Property(x => x.UtilityPeriod).HasColumnType("char(7)");
-        entity.Property(x => x.IssuedAt).HasDefaultValueSql("SYSUTCDATETIME()");
+        entity.Property(x => x.IssuedAt).HasDefaultValueSql(UtcNowSql(sqlite));
         entity.Property(x => x.IsProrated)
-            .HasComputedColumnSql("CONVERT(bit, CASE WHEN [DaysCharged] <> [DaysInPeriod] THEN 1 ELSE 0 END)", stored: true);
+            .HasComputedColumnSql(
+                sqlite
+                    ? "CASE WHEN [DaysCharged] <> [DaysInPeriod] THEN 1 ELSE 0 END"
+                    : "CONVERT(bit, CASE WHEN [DaysCharged] <> [DaysInPeriod] THEN 1 ELSE 0 END)",
+                stored: true);
         foreach (var property in new[]
                  {
                      nameof(Invoice.RentAmount), nameof(Invoice.WaterRate), nameof(Invoice.ElectricRate),
@@ -156,10 +181,10 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         entity.HasOne(x => x.Tenant).WithMany(x => x.Invoices).HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
     }
 
-    private static void ConfigurePayment(ModelBuilder modelBuilder)
+    private static void ConfigurePayment(ModelBuilder modelBuilder, bool sqlite)
     {
         var entity = modelBuilder.Entity<Payment>();
-        entity.ToTable("Payment", table => table.HasCheckConstraint("CK_Payment_Positive", "[PaidAmount] > 0"));
+        entity.ToTable("Payment", table => table.HasCheckConstraint("CK_Payment_Positive", $"{Money(sqlite, "[PaidAmount]")} > 0"));
         entity.HasKey(x => x.PaymentId);
         entity.Property(x => x.PaidAmount).HasPrecision(10, 2);
         entity.Property(x => x.Method).HasMaxLength(20);
@@ -169,13 +194,13 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         entity.Property(x => x.VerifiedBy).HasMaxLength(20);
         entity.Property(x => x.VerificationStatus).HasMaxLength(20).HasDefaultValue("Pending");
         entity.Property(x => x.VerificationNote).HasMaxLength(500);
-        entity.Property(x => x.RecordedAt).HasDefaultValueSql("SYSUTCDATETIME()");
+        entity.Property(x => x.RecordedAt).HasDefaultValueSql(UtcNowSql(sqlite));
         entity.HasIndex(x => x.SlipRef).IsUnique().HasFilter("[SlipRef] IS NOT NULL");
         entity.HasIndex(x => x.SlipHash).IsUnique().HasFilter("[SlipHash] IS NOT NULL");
         entity.HasOne(x => x.Invoice).WithMany(x => x.Payments).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Restrict);
     }
 
-    private static void ConfigureAuditLog(ModelBuilder modelBuilder)
+    private static void ConfigureAuditLog(ModelBuilder modelBuilder, bool sqlite)
     {
         var entity = modelBuilder.Entity<AuditLog>();
         entity.ToTable("AuditLog");
@@ -186,17 +211,17 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         entity.Property(x => x.OldValue).HasMaxLength(100);
         entity.Property(x => x.NewValue).HasMaxLength(100);
         entity.Property(x => x.ChangedBy).HasMaxLength(100);
-        entity.Property(x => x.ChangedAt).HasDefaultValueSql("SYSUTCDATETIME()");
+        entity.Property(x => x.ChangedAt).HasDefaultValueSql(UtcNowSql(sqlite));
         entity.HasIndex(x => new { x.EntityName, x.EntityKey, x.ChangedAt });
     }
 
-    private static void ConfigureSettlement(ModelBuilder modelBuilder)
+    private static void ConfigureSettlement(ModelBuilder modelBuilder, bool sqlite)
     {
         var entity = modelBuilder.Entity<MoveOutSettlement>();
         entity.ToTable("MoveOutSettlement");
         entity.HasKey(x => x.SettlementId);
         entity.HasIndex(x => x.TenantId).IsUnique();
-        entity.Property(x => x.SettledAt).HasDefaultValueSql("SYSUTCDATETIME()");
+        entity.Property(x => x.SettledAt).HasDefaultValueSql(UtcNowSql(sqlite));
         foreach (var property in new[]
                  {
                      nameof(MoveOutSettlement.DepositAmount), nameof(MoveOutSettlement.FinalWaterAmount),
@@ -222,7 +247,7 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         entity.HasOne(x => x.Tenant).WithOne().HasForeignKey<MoveOutSettlement>(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
 
         var deduction = modelBuilder.Entity<SettlementDeduction>();
-        deduction.ToTable("SettlementDeduction", table => table.HasCheckConstraint("CK_Deduction_Positive", "[Amount] > 0"));
+        deduction.ToTable("SettlementDeduction", table => table.HasCheckConstraint("CK_Deduction_Positive", $"{Money(sqlite, "[Amount]")} > 0"));
         deduction.HasKey(x => x.DeductionId);
         deduction.Property(x => x.Description).HasMaxLength(200);
         deduction.Property(x => x.Amount).HasPrecision(10, 2);
@@ -259,13 +284,13 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         });
     }
 
-    private static void ConfigureMessaging(ModelBuilder modelBuilder)
+    private static void ConfigureMessaging(ModelBuilder modelBuilder, bool sqlite)
     {
         var code = modelBuilder.Entity<TenantLinkCode>();
         code.ToTable("TenantLinkCode");
         code.HasKey(x => x.LinkCodeId);
         code.Property(x => x.CodeHash).HasColumnType("char(64)");
-        code.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
+        code.Property(x => x.CreatedAt).HasDefaultValueSql(UtcNowSql(sqlite));
         code.HasIndex(x => x.CodeHash).IsUnique();
         code.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
 
@@ -274,7 +299,7 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         notification.HasKey(x => x.NotificationId);
         notification.Property(x => x.NotificationType).HasMaxLength(30);
         notification.Property(x => x.ExternalMessageId).HasMaxLength(100);
-        notification.Property(x => x.SentAt).HasDefaultValueSql("SYSUTCDATETIME()");
+        notification.Property(x => x.SentAt).HasDefaultValueSql(UtcNowSql(sqlite));
         notification.HasIndex(x => new { x.InvoiceId, x.NotificationType }).IsUnique()
             .HasFilter("[InvoiceId] IS NOT NULL");
         notification.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);

@@ -25,8 +25,14 @@ public static class DependencyInjection
         IConfiguration configuration,
         string? contentRootPath = null)
     {
+        // ของจริงเป็น SQL Server เสมอ SQLite มีไว้เฉพาะให้ลองเปิดหน้าจอบนเครื่อง dev
+        // ที่ยังไม่มี SQL Server โดยไม่ต้องติดตั้งอะไร (ดู README)
+        var useSqlite = string.Equals(configuration["Database:Provider"], "Sqlite", StringComparison.OrdinalIgnoreCase);
         services.AddDbContext<RentalDbContext>(options =>
-            options.UseSqlServer(connectionString));
+        {
+            if (useSqlite) options.UseSqlite(connectionString);
+            else options.UseSqlServer(connectionString);
+        });
         services.AddScoped<RentalOperationsService>();
         services.Configure<BillingOptions>(options =>
         {

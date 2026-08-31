@@ -66,6 +66,31 @@ dotnet run --project RentalManager.Api
 dotnet ef database update --project RentalManager.Infrastructure --startup-project RentalManager.Api
 ```
 
+## ลองรันแบบไม่ติดตั้งอะไร (SQLite)
+
+ถ้ายังไม่มี SQL Server บนเครื่องและแค่อยากเปิดดูหน้าจอ ใช้ SQLite ได้ เป็นไฟล์เดียวจบ ไม่มี service ไม่ต้องติดตั้ง
+
+```bash
+dotnet user-secrets set --project RentalManager.Api "Database:Provider" "Sqlite"
+dotnet user-secrets set --project RentalManager.Api "ConnectionStrings:RentalDb" "Data Source=rentalmanager-dev.db"
+dotnet user-secrets set --project RentalManager.Api "Admin:Username" "amp"
+dotnet user-secrets set --project RentalManager.Api "Admin:Password" "Test_Admin_2026"
+dotnet user-secrets set --project RentalManager.Api "PromptPay:Target" "0812345678"
+dotnet user-secrets set --project RentalManager.Api "PublicLinks:SigningKey" "0123456789abcdef0123456789abcdef"
+dotnet run --project RentalManager.Api
+```
+
+เปิด <http://localhost:5080> แล้วล็อกอินด้วยค่าข้างบน โหมดนี้จะสร้าง schema จากโมเดลด้วย `EnsureCreated`
+ไม่ได้ใช้ migration และ seed ห้อง 1–6 พร้อมอัตราเริ่มต้นให้อัตโนมัติ ลบไฟล์ `.db` ทิ้งเมื่อไหร่ก็เริ่มใหม่ได้
+
+> **โหมดนี้ใช้ดูหน้าจอเท่านั้น ห้ามใช้เก็บข้อมูลจริง**
+> SQLite ไม่มีชนิด `decimal` EF จึงเก็บเป็น TEXT แล้วคำนวณ computed column เป็น floating point
+> ซึ่งขัดกับกฎ "เงินใช้ `decimal` เสมอ" ใน CLAUDE.md ข้อ 9 — ตัวเลขที่เห็นอาจคลาดเคลื่อนในหลักทศนิยม
+> นอกจากนี้ view และ stored procedure ทั้งสามตัวเป็น T-SQL จึงไม่ถูกสร้างในโหมดนี้
+> (แอปไม่ได้เรียกใช้อยู่แล้ว แต่ integration test เรียก)
+>
+> ของจริงเป็น SQL Server เสมอ และ CI รันเทสกับ SQL Server จริงทุกครั้งที่ push
+
 ## นำขึ้นเซิร์ฟเวอร์
 
 ดู [DEPLOYMENT.md](DEPLOYMENT.md) มีสองทางให้เลือก: MonsterASP.NET (IIS shared hosting ตามที่เลือกไว้ใน CLAUDE.md ข้อ 10)
