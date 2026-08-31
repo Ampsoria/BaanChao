@@ -55,6 +55,15 @@ jobs:
           docker logs "$SQLSERVER_ID" 2>&1 | tail -50 >&2
           exit 1
 
+      # PDF มีชื่อผู้เช่าเป็นภาษาไทย และ QuestPDF เปิด CheckIfAllTextGlyphsAreAvailable ไว้
+      # runner เปล่าๆ ไม่มีฟอนต์ไทยจึง generate ไม่ผ่าน ลงชุดเดียวกับที่ Dockerfile ใช้
+      # เพื่อให้ CI สะท้อนสภาพ production จริง
+      - name: Install Thai-capable fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-noto-core
+          fc-list : family | grep -i "noto sans thai" | head -3 || true
+
       - name: Restore
         run: dotnet restore RentalManager.slnx
 
@@ -78,8 +87,8 @@ jobs:
             echo "::error title=Test failures::ไม่มี test-output.log (พังก่อนถึงขั้นรันเทส)"
             exit 0
           fi
-          SUMMARY=$(grep -E "^\s*(Failed|Error Message|Stack Trace|Assert\.|Expected:|Actual:)|Microsoft\.Data\.SqlClient|System\.[A-Za-z.]*Exception" test-output.log \
-            | head -40 | sed 's/%/%25/g; s/\r//g' | awk '{printf "%s%%0A", $0}')
+          SUMMARY=$(grep -E -A8 "^\s*(Failed |Error Message:)" test-output.log \
+            | head -60 | sed 's/%/%25/g; s/\r//g' | awk '{printf "%s%%0A", $0}')
           echo "::error title=Test failures::${SUMMARY:-ไม่พบบรรทัดสรุปใน test-output.log}"
 
       - name: Upload test log
