@@ -112,12 +112,31 @@ if (app.Configuration.GetValue("Database:InitializeOnStartup", false))
 {
     await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<RentalDbContext>();
-    // migration ทั้งหมดเขียนเป็น T-SQL จึงใช้ได้เฉพาะ SQL Server
-    // โหมด SQLite สร้าง schema จากโมเดลตรงๆ เพราะมีไว้ดูหน้าจอเท่านั้น ไม่ได้เก็บข้อมูลจริง
-    if (string.Equals(app.Configuration["Database:Provider"], "Sqlite", StringComparison.OrdinalIgnoreCase))
-        await db.Database.EnsureCreatedAsync();
-    else
-        await db.Database.MigrateAsync();
+    var sqliteProvider = string.Equals(
+        app.Configuration["Database:Provider"], "Sqlite", StringComparison.OrdinalIgnoreCase);
+    var dbLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+
+    // ฐานข้อมูลอาจยังไม่รับ connection ตอนแอปสตาร์ต เช่นคอนเทนเนอร์ SQL Server ที่เพิ่งบูต
+    // หรือโฮสต์ที่เพิ่งตื่นจากหลับ ถ้าไม่ลองใหม่ แอปจะตายทันทีแล้วเข้าไม่ได้เลย
+    const int attempts = 12;
+    for (var attempt = 1; ; attempt++)
+    {
+        try
+        {
+            // migration ทั้งหมดเขียนเป็น T-SQL จึงใช้ได้เฉพาะ SQL Server
+            // โหมด SQLite สร้าง schema จากโมเดลตรงๆ เพราะมีไว้ดูหน้าจอเท่านั้น
+            if (sqliteProvider) await db.Database.EnsureCreatedAsync();
+            else await db.Database.MigrateAsync();
+            break;
+        }
+        catch (Exception exception) when (attempt < attempts && !sqliteProvider)
+        {
+            dbLogger.LogWarning(
+                "ยังต่อฐานข้อมูลไม่ได้ (ครั้งที่ {Attempt}/{Attempts}): {Message} — จะลองใหม่ใน 5 วินาที",
+                attempt, attempts, exception.Message);
+            await Task.Delay(TimeSpan.FromSeconds(5));
+        }
+    }
 }
 
 // สลิปคือหลักฐานการชำระเงิน ถ้าเขียนโฟลเดอร์ไม่ได้ต้องรู้ตั้งแต่ตอนสตาร์ต
