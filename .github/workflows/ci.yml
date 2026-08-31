@@ -65,7 +65,30 @@ jobs:
       - name: Test
         env:
           RENTAL_TEST_SQLSERVER: "Server=127.0.0.1,1433;Database=RentalManagerIntegration;User Id=sa;Password=Ci_Rental_2026!;TrustServerCertificate=True"
-        run: dotnet test RentalManager.slnx --no-build --logger "console;verbosity=normal"
+        run: |
+          set -o pipefail
+          dotnet test RentalManager.slnx --no-build --logger "console;verbosity=normal" 2>&1 | tee test-output.log
+
+      # การดาวน์โหลด log ของ job ต้องใช้ token แต่ annotation อ่านได้แบบสาธารณะ
+      # จึงยกข้อความเทสที่ตกขึ้นมาเป็น annotation ให้วินิจฉัยได้จากหน้า PR ทันที
+      - name: Surface test failures
+        if: failure()
+        run: |
+          if [ ! -f test-output.log ]; then
+            echo "::error title=Test failures::ไม่มี test-output.log (พังก่อนถึงขั้นรันเทส)"
+            exit 0
+          fi
+          SUMMARY=$(grep -E "^\s*(Failed|Error Message|Stack Trace|Assert\.|Expected:|Actual:)|Microsoft\.Data\.SqlClient|System\.[A-Za-z.]*Exception" test-output.log \
+            | head -40 | sed 's/%/%25/g; s/\r//g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Test failures::${SUMMARY:-ไม่พบบรรทัดสรุปใน test-output.log}"
+
+      - name: Upload test log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: test-output.log
+          retention-days: 7
 
       - name: Check admin script syntax
         run: node --check RentalManager.Api/wwwroot/app.js
