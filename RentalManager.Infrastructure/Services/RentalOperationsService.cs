@@ -207,7 +207,10 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
             created++;
         }
 
-        AddAudit("Invoice", billingPeriod, "GenerateMonthly", null, created.ToString(CultureInfo.InvariantCulture), changedBy);
+        // เขียน audit เฉพาะตอนมีบิลเกิดจริง งานอัตโนมัติเรียกซ้ำทุกรอบเพื่อตามเก็บงวดที่ตกหล่น
+        // ถ้าเขียนทุกครั้งจะกลายเป็น log ขยะวันละหลายร้อยแถว
+        if (created > 0)
+            AddAudit("Invoice", billingPeriod, "GenerateMonthly", null, created.ToString(CultureInfo.InvariantCulture), changedBy);
         await db.SaveChangesAsync(cancellationToken);
 
         // ห้ามเงียบ: บอกให้ชัดว่าห้องไหนออกบิลโดยยังไม่มีเลขมิเตอร์ของงวดก่อน

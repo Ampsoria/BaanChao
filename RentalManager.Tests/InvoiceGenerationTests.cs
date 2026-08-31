@@ -210,6 +210,67 @@ public sealed class InvoiceGenerationTests
     }
 
     [Fact]
+    public async Task CatchUpGeneration_StillBillsAMonthWhoseFirstDayWasMissed()
+    {
+        // จำลองแอปที่หลับข้ามวันที่ 1 ต.ค. แล้วมาตื่นวันที่ 3
+        // การตามเก็บต้องยังออกบิลงวด ต.ค. ให้ครบ ไม่ใช่ปล่อยให้เดือนนั้นหายไป
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = await SeededAsync(ct);
+        db.Tenants.Add(new Tenant
+        {
+            TenantId = 1,
+            RoomId = 2,
+            FullName = "ผู้เช่า",
+            MovedInAt = new DateOnly(2026, 8, 1),
+            DepositAmount = 2000m
+        });
+        db.MeterReadings.Add(new MeterReading
+        {
+            RoomId = 2,
+            BillingPeriod = "2026-09",
+            ReadAt = new DateOnly(2026, 9, 30),
+            WaterPrev = 100m,
+            WaterCurrent = 105m,
+            ElectricPrev = 500m,
+            ElectricCurrent = 530m
+        });
+        await db.SaveChangesAsync(ct);
+
+        var result = await NewService(db).GenerateMonthlyInvoicesAsync("2026-10", "Automation", ct);
+
+        Assert.Equal(1, result.Value);
+        var invoice = await db.Invoices.SingleAsync(ct);
+        Assert.Equal("2026-10", invoice.BillingPeriod);
+        // วันครบกำหนดยังเป็นวันที่ 5 ตามนโยบาย ไม่ได้เลื่อนตามวันที่ตามเก็บ
+        Assert.Equal(new DateOnly(2026, 10, 5), invoice.DueDate);
+    }
+
+    [Fact]
+    public async Task RepeatedGeneration_DoesNotFloodTheAuditLog()
+    {
+        // งานอัตโนมัติเรียกซ้ำทุกรอบ (ทุก 15 นาที) เพื่อตามเก็บงวดที่ตกหล่น
+        // audit ต้องบันทึกเฉพาะรอบที่มีบิลเกิดจริง
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = await SeededAsync(ct);
+        db.Tenants.Add(new Tenant
+        {
+            TenantId = 1,
+            RoomId = 2,
+            FullName = "ผู้เช่า",
+            MovedInAt = new DateOnly(2026, 8, 1),
+            DepositAmount = 2000m
+        });
+        await db.SaveChangesAsync(ct);
+        var service = NewService(db);
+
+        for (var i = 0; i < 5; i++)
+            await service.GenerateMonthlyInvoicesAsync("2026-10", "Automation", ct);
+
+        Assert.Equal(1, await db.Invoices.CountAsync(ct));
+        Assert.Equal(1, await db.AuditLogs.CountAsync(x => x.FieldName == "GenerateMonthly", ct));
+    }
+
+    [Fact]
     public async Task MoveInInvoice_HasNoUtilityPeriodAndUsesConfiguredMinimumStay()
     {
         var ct = TestContext.Current.CancellationToken;

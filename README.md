@@ -34,7 +34,9 @@
 dotnet tool restore
 dotnet user-secrets set --project RentalManager.Api "ConnectionStrings:RentalDb" "Server=localhost;Database=RentalManager;User Id=sa;Password=...;TrustServerCertificate=True"
 dotnet user-secrets set --project RentalManager.Api "Admin:Username" "amp"
-dotnet user-secrets set --project RentalManager.Api "Admin:Password" "your-strong-password"
+# สร้างค่า hash แล้วนำไปใส่ Admin:PasswordHash (พิมพ์รหัสผ่านทาง stdin จะได้ไม่ตกค้างใน shell history)
+dotnet run --project RentalManager.Api -- hash-password
+dotnet user-secrets set --project RentalManager.Api "Admin:PasswordHash" "pbkdf2$210000$...$..."
 dotnet user-secrets set --project RentalManager.Api "PromptPay:Target" "0812345678"
 dotnet user-secrets set --project RentalManager.Api "PublicLinks:SigningKey" "at-least-32-random-characters"
 dotnet user-secrets set --project RentalManager.Api "PublicLinks:BaseUrl" "https://your-public-host.example"
@@ -47,6 +49,14 @@ dotnet run --project RentalManager.Api
 |------|-----------|----------|
 | `Billing:DueDay` | 5 | วันครบกำหนดชำระ ใช้เมื่อ `BillingPolicy.GraceDays` ยังไม่ได้ตั้ง |
 | `Billing:MinimumStayMonths` | 5 | ระยะพักขั้นต่ำ อยู่ไม่ครบ = ริบมัดจำส่วนที่เหลือ (เก็บ snapshot ลง `Tenant` ตอนย้ายเข้า) |
+| `Admin:LoginAttemptsPerWindow` | 5 | จำนวนครั้งที่ลองล็อกอินได้ต่อ IP ต่อหนึ่งหน้าต่างเวลา เกินแล้วตอบ 429 |
+| `Admin:LoginWindowMinutes` | 5 | ความยาวหน้าต่างเวลาของการนับข้างบน |
+
+`Admin:PasswordHash` มีความสำคัญกว่า `Admin:Password` เสมอ ถ้ายังไม่ได้ตั้ง hash ระบบจะยังยอมใช้ plaintext
+เพื่อความเข้ากันได้กับ config เดิม แต่จะเขียน warning ตอนสตาร์ตเมื่อไม่ได้อยู่ใน Development
+
+การออกบิลอัตโนมัติจะตามเก็บงวดปัจจุบันและงวดก่อนหน้าทุกรอบ ไม่ได้ผูกกับวันที่ 1
+แอปที่ถูกพักตอนไม่มีคนใช้แล้วตื่นมาทีหลังจึงยังออกบิลของเดือนนั้นให้ครบ
 
 เมื่อ `Database:InitializeOnStartup=true` แอปจะใช้ EF migrations สร้าง/อัปเกรด schema, seed ห้อง 1–6, view และ stored procedures ให้อัตโนมัติ หน้า Admin อยู่ที่ URL ราก และ health check อยู่ที่ `/health`
 

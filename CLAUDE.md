@@ -853,6 +853,9 @@ GET    /api/admin/audit              -> ประวัติการแก้�
 
 - **ต้องมี auth ก่อน deploy ขึ้น production** ห้ามปล่อยให้เข้าถึงด้วย URL อย่างเดียว
 - 6 ห้อง ผู้ใช้คนเดียว → cookie auth + user เดียวก็พอ ไม่ต้อง Identity เต็มรูปแบบ
+- **ห้ามเก็บรหัสผ่านเป็น plaintext** เก็บเป็น PBKDF2 hash ใน `Admin:PasswordHash`
+  (สร้างด้วย `dotnet run --project RentalManager.Api -- hash-password`) เพราะใครอ่าน env var ได้ก็เข้าระบบได้ทันที
+- **หน้า login ต้องมี rate limit** ผู้ใช้คนเดียวรหัสเดียวและเปิดสู่อินเทอร์เน็ต ถ้าไม่จำกัดก็โดนเดารหัสได้เรื่อยๆ
 - ทุก endpoint ที่เขียนข้อมูลต้องบันทึก `ChangedBy` ลง `AuditLog`
 
 ---
@@ -913,8 +916,8 @@ GET    /api/admin/audit              -> ประวัติการแก้�
 
 ### กฎสำคัญ
 
-**ห้าม hardcode URL ในโค้ด ต้องอ่านจาก config เสมอ** (`BaanChao:PublicBaseUrl`)
-วันย้ายโฮสต์หรือเพิ่ม domain จะได้แก้ที่เดียว
+**ห้าม hardcode URL ในโค้ด ต้องอ่านจาก config เสมอ** (`PublicLinks:BaseUrl` คู่กับ `PublicLinks:SigningKey`)
+วันย้ายโฮสต์หรือเพิ่ม domain จะได้แก้ที่เดียว — ทั้ง webhook URL และลิงก์ QR ที่ส่งเข้าไลน์ใช้ค่านี้ตัวเดียวกัน
 
 ### ต้องเช็คก่อนขึ้นจริง
 
@@ -970,19 +973,20 @@ configurationBuilder.Properties<decimal>().HavePrecision(12, 2);
 
 ```json
 {
-  "BaanChao": {
-    "Billing":  { "DueDay": 5, "MinimumStayMonths": 5 },
-    "Storage":  { "SlipRoot": "/var/baanchao/slips" },
-    "Line":     { "ChannelSecret": "", "ChannelAccessToken": "", "Enabled": false },
-    "PromptPay":{ "Target": "" },
-    "Slip":     { "Verifier": "Local" }
-  }
+  "Admin":       { "Username": "amp", "PasswordHash": "", "LoginAttemptsPerWindow": 5, "LoginWindowMinutes": 5 },
+  "Billing":     { "DueDay": 5, "MinimumStayMonths": 5 },
+  "Storage":     { "SlipRoot": "slips" },
+  "Line":        { "ChannelSecret": "", "ChannelAccessToken": "", "Enabled": false },
+  "PromptPay":   { "Target": "" },
+  "PublicLinks": { "SigningKey": "", "BaseUrl": "" },
+  "SlipVerification": { "External": { "Enabled": false, "Endpoint": "", "ApiKey": "" } }
 }
 ```
 
-- `Line.Enabled = false` ต้องทำให้ระบบยังใช้งานได้ครบ
-- `Slip.Verifier` สลับได้ระหว่าง `Local` กับ `ExternalApi` ผ่าน DI
+- `Line:Enabled = false` ต้องทำให้ระบบยังใช้งานได้ครบ
+- `SlipVerification:External:Enabled` สลับระหว่างตรวจสลิปแบบ local (ZXing) กับผ่าน API ภายนอก โดยทั้งคู่อยู่หลัง `ISlipVerifier`
 - Secrets ทั้งหมดอยู่ใน User Secrets ตอน dev, environment variables ตอน production
+- `Admin:PasswordHash` มีความสำคัญเหนือ `Admin:Password` ที่เป็น plaintext ซึ่งเหลือไว้เพื่อความเข้ากันได้เท่านั้น
 
 ---
 

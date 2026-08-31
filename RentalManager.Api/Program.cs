@@ -1,9 +1,27 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+using RentalManager.Api.Services;
 using RentalManager.Infrastructure;
 using RentalManager.Infrastructure.Data;
 using RentalManager.Infrastructure.Services;
+
+// โหมดช่วยตั้งรหัสผ่าน: พิมพ์ค่าที่จะนำไปใส่ Admin:PasswordHash
+// อ่านจาก stdin ไม่ใช่ argument เพื่อไม่ให้รหัสผ่านตกค้างใน shell history
+if (args is ["hash-password", ..])
+{
+    Console.Error.Write("Password: ");
+    var input = Console.ReadLine();
+    if (string.IsNullOrWhiteSpace(input))
+    {
+        Console.Error.WriteLine("ยกเลิก: ไม่ได้กรอกรหัสผ่าน");
+        return 1;
+    }
+    Console.WriteLine(AdminPasswordHasher.Hash(input));
+    return 0;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("RentalDb");
@@ -29,6 +47,20 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         };
     });
 builder.Services.AddAuthorization();
+// จำกัดจำนวนครั้งที่ลองล็อกอินต่อ IP กัน brute force เพราะมีผู้ใช้คนเดียวและรหัสผ่านเดียว
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(RateLimitPolicies.Login, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = builder.Configuration.GetValue("Admin:LoginAttemptsPerWindow", 5),
+                Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("Admin:LoginWindowMinutes", 5)),
+                QueueLimit = 0
+            }));
+});
 builder.Services.AddProblemDetails();
 builder.Services.AddControllersWithViews().AddJsonOptions(options =>
     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -57,6 +89,7 @@ app.UseExceptionHandler(exceptionHandlerApp => exceptionHandlerApp.Run(async con
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseRouting();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.Use(async (context, next) =>
@@ -81,10 +114,18 @@ if (app.Configuration.GetValue("Database:InitializeOnStartup", false))
     await db.Database.MigrateAsync();
 }
 
+// เตือนดังๆ ถ้ายังใช้รหัสผ่าน plaintext บนเครื่องจริง
+if (!app.Environment.IsDevelopment() &&
+    !AdminPasswordHasher.IsHash(app.Configuration["Admin:PasswordHash"]))
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup").LogWarning(
+        "Admin:PasswordHash ยังไม่ได้ตั้ง ระบบกำลังใช้รหัสผ่านแบบ plaintext จาก Admin:Password "
+        + "สร้างค่าที่ปลอดภัยด้วย: dotnet run --project RentalManager.Api -- hash-password");
+
 app.MapControllers();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
+return 0;
 
 public partial class Program;
