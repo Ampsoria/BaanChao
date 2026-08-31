@@ -25,8 +25,30 @@ public sealed class SqlServerIntegrationTests
 
         var options = new DbContextOptionsBuilder<RentalDbContext>().UseSqlServer(connectionString).Options;
         var db = new RentalDbContext(options);
-        await db.Database.MigrateAsync(ct);
+        await MigrateWithRetryAsync(db, ct);
         return db;
+    }
+
+    /// <summary>
+    /// เซิร์ฟเวอร์ใน CI อาจเพิ่งบูตเสร็จและยังไม่รับ connection ตอนเทสตัวแรกเรียก
+    /// จึงลองใหม่สักพักก่อนยอมแพ้ ไม่ใช้ EnableRetryOnFailure เพราะเทสเปิดทรานแซกชันเอง
+    /// ซึ่ง execution strategy แบบ retry ไม่รองรับ
+    /// </summary>
+    private static async Task MigrateWithRetryAsync(RentalDbContext db, CancellationToken ct)
+    {
+        const int attempts = 12;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await db.Database.MigrateAsync(ct);
+                return;
+            }
+            catch (SqlException) when (attempt < attempts)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), ct);
+            }
+        }
     }
 
     [Fact]
