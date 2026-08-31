@@ -12,3 +12,4 @@ appsettings.Development.json
 slips/
 TestResults/
 coverage/
+test-output.log

@@ -32,9 +32,7 @@ public sealed class BillingAutomationWorker(
             var operations = scope.ServiceProvider.GetRequiredService<RentalOperationsService>();
             var bangkokNow = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "Asia/Bangkok");
             var today = DateOnly.FromDateTime(bangkokNow.Date);
-            var period = today.ToString("yyyy-MM");
-            if (today.Day == 1)
-                await operations.GenerateMonthlyInvoicesAsync(period, "Automation", ct);
+            await GenerateDueInvoices(operations, today, ct);
             await ApplyLateFees(db, today, ct);
             await SendNotifications(db, today, ct);
         }
@@ -42,6 +40,29 @@ public sealed class BillingAutomationWorker(
         catch (Exception exception)
         {
             logger.LogError(exception, "Billing automation cycle failed");
+        }
+    }
+
+    /// <summary>
+    /// ออกบิลของงวดที่ถึงกำหนดแล้วแต่ยังไม่ได้ออก
+    ///
+    /// เดิมเช็คว่า "วันนี้เป็นวันที่ 1 หรือเปล่า" ซึ่งพังบนโฮสต์ที่พักแอปตอนไม่มีคนใช้
+    /// (ดู CLAUDE.md ข้อ 10) ถ้าแอปหลับข้ามวันที่ 1 ทั้งวัน พอตื่นมาวันที่ 2 เงื่อนไขก็เป็นเท็จ
+    /// แล้วเดือนนั้นจะไม่มีบิลเลยโดยไม่มีใครรู้
+    ///
+    /// จึงเปลี่ยนเป็นตามเก็บงวดปัจจุบันและงวดก่อนหน้าทุกรอบแทน
+    /// ปลอดภัยเพราะการออกบิล idempotent อยู่แล้ว เรียกซ้ำจะได้ 0 ใบ
+    /// </summary>
+    private async Task GenerateDueInvoices(RentalOperationsService operations, DateOnly today, CancellationToken ct)
+    {
+        var currentPeriod = today.ToString("yyyy-MM");
+        var periods = new[] { RentalOperationsService.PreviousPeriod(currentPeriod), currentPeriod };
+        foreach (var period in periods)
+        {
+            var result = await operations.GenerateMonthlyInvoicesAsync(period, "Automation", ct);
+            if (result.Value > 0)
+                logger.LogInformation("Generated {Count} invoice(s) for {Period}: {Message}",
+                    result.Value, period, result.Message);
         }
     }
 
@@ -87,7 +108,9 @@ public sealed class BillingAutomationWorker(
         var baseUrl = configuration["PublicLinks:BaseUrl"]?.TrimEnd('/');
         if (string.IsNullOrWhiteSpace(baseUrl)) return;
         var invoices = await db.Invoices.Include(x => x.Payments).Include(x => x.Room).Include(x => x.Tenant)
-            .Where(x => x.Status != InvoiceStatus.Paid && x.Status != InvoiceStatus.Void && x.Tenant.LineUserId != null)
+            // ส่งอัตโนมัติเฉพาะผู้เช่าที่เลือกรับบิลทาง LINE — คนที่รับกระดาษให้ Amp พิมพ์บิลเอง
+            .Where(x => x.Status != InvoiceStatus.Paid && x.Status != InvoiceStatus.Void
+                        && x.Tenant.LineUserId != null && x.Tenant.PreferredChannel == TenantChannels.Line)
             .ToListAsync(ct);
         foreach (var invoice in invoices)
         {

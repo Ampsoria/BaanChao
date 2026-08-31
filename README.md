@@ -13,6 +13,10 @@
 
 - ย้ายเข้าแบบ prorate, snapshot มัดจำ และจดมิเตอร์ตั้งต้น
 - CRUD มิเตอร์, ออกบิล, เก็บประวัติราคา/นโยบาย และ audit log
+- บิลงวด M คิดค่าเช่าล่วงหน้าของเดือน M แต่คิดค่าน้ำ-ค่าไฟของเดือน M−1 (`Invoice.UtilityPeriod`)
+  ผู้เช่าที่เพิ่งย้ายเข้าเดือนนี้จะไม่ถูกคิดหน่วยของผู้เช่าคนก่อน
+- `Tenant.PreferredChannel` (`Line`/`Paper`) กำหนดว่าใครรับบิลทางไหน ระบบทำงานได้ครบแม้ไม่มี LINE เลย
+- พิมพ์บิลเป็น PDF ได้ที่ `GET /api/admin/invoices/{id}/print` สำหรับผู้เช่าที่รับบิลเป็นกระดาษ
 - ย้ายออก หักค่าน้ำ/ไฟ/หนี้/ค่าเสียหาย พร้อมรูปหลักฐานและ PDF แจกแจง
 - PromptPay QR ที่คิดจากยอดคงเหลือและเศษสตางค์ประจำห้อง
 - LINE webhook แบบตรวจ HMAC, รหัสผูกห้อง, ส่งบิล/เตือน และรับรูปสลิป
@@ -30,12 +34,29 @@
 dotnet tool restore
 dotnet user-secrets set --project RentalManager.Api "ConnectionStrings:RentalDb" "Server=localhost;Database=RentalManager;User Id=sa;Password=...;TrustServerCertificate=True"
 dotnet user-secrets set --project RentalManager.Api "Admin:Username" "amp"
-dotnet user-secrets set --project RentalManager.Api "Admin:Password" "your-strong-password"
+# สร้างค่า hash แล้วนำไปใส่ Admin:PasswordHash (พิมพ์รหัสผ่านทาง stdin จะได้ไม่ตกค้างใน shell history)
+dotnet run --project RentalManager.Api -- hash-password
+dotnet user-secrets set --project RentalManager.Api "Admin:PasswordHash" "pbkdf2$210000$...$..."
 dotnet user-secrets set --project RentalManager.Api "PromptPay:Target" "0812345678"
 dotnet user-secrets set --project RentalManager.Api "PublicLinks:SigningKey" "at-least-32-random-characters"
 dotnet user-secrets set --project RentalManager.Api "PublicLinks:BaseUrl" "https://your-public-host.example"
 dotnet run --project RentalManager.Api
 ```
+
+ค่าที่เป็นกฎทางธุรกิจอยู่ใน `appsettings.json` ส่วน `Billing` ไม่ได้ hardcode ในโค้ด:
+
+| คีย์ | ค่าเริ่มต้น | ความหมาย |
+|------|-----------|----------|
+| `Billing:DueDay` | 5 | วันครบกำหนดชำระ ใช้เมื่อ `BillingPolicy.GraceDays` ยังไม่ได้ตั้ง |
+| `Billing:MinimumStayMonths` | 5 | ระยะพักขั้นต่ำ อยู่ไม่ครบ = ริบมัดจำส่วนที่เหลือ (เก็บ snapshot ลง `Tenant` ตอนย้ายเข้า) |
+| `Admin:LoginAttemptsPerWindow` | 5 | จำนวนครั้งที่ลองล็อกอินได้ต่อ IP ต่อหนึ่งหน้าต่างเวลา เกินแล้วตอบ 429 |
+| `Admin:LoginWindowMinutes` | 5 | ความยาวหน้าต่างเวลาของการนับข้างบน |
+
+`Admin:PasswordHash` มีความสำคัญกว่า `Admin:Password` เสมอ ถ้ายังไม่ได้ตั้ง hash ระบบจะยังยอมใช้ plaintext
+เพื่อความเข้ากันได้กับ config เดิม แต่จะเขียน warning ตอนสตาร์ตเมื่อไม่ได้อยู่ใน Development
+
+การออกบิลอัตโนมัติจะตามเก็บงวดปัจจุบันและงวดก่อนหน้าทุกรอบ ไม่ได้ผูกกับวันที่ 1
+แอปที่ถูกพักตอนไม่มีคนใช้แล้วตื่นมาทีหลังจึงยังออกบิลของเดือนนั้นให้ครบ
 
 เมื่อ `Database:InitializeOnStartup=true` แอปจะใช้ EF migrations สร้าง/อัปเกรด schema, seed ห้อง 1–6, view และ stored procedures ให้อัตโนมัติ หน้า Admin อยู่ที่ URL ราก และ health check อยู่ที่ `/health`
 
@@ -94,6 +115,9 @@ dotnet test RentalManager.slnx --no-build
 node --check RentalManager.Api/wwwroot/app.js
 docker compose config
 ```
+
+GitHub Actions ที่ [.github/workflows/ci.yml](.github/workflows/ci.yml) รันชุดเดียวกันนี้ทุก push/PR
+โดยยก SQL Server ขึ้นเป็น service container และตั้ง `RENTAL_TEST_SQLSERVER` ให้ จึงรัน integration test จริงไม่ข้าม
 
 SQL integration test จะถูกข้ามหากไม่กำหนดฐานข้อมูลทดสอบ:
 

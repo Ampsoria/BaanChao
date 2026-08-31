@@ -45,7 +45,8 @@ public sealed class RoomsController(RentalDbContext db) : AdminControllerBase
                 x.LineUserId,
                 x.MovedInAt,
                 x.DepositAmount,
-                x.MinimumStayMonths
+                x.MinimumStayMonths,
+                x.PreferredChannel
             }).FirstOrDefault(),
             LatestMeter = room.MeterReadings.OrderByDescending(x => x.ReadAt).Select(x => new
             {
