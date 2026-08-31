@@ -91,6 +91,30 @@ dotnet run --project RentalManager.Api
 >
 > ของจริงเป็น SQL Server เสมอ และ CI รันเทสกับ SQL Server จริงทุกครั้งที่ push
 
+## ให้คนอื่นลองใช้ชั่วคราว โดยไม่ต้องติดตั้งหรือสมัครอะไรเพิ่ม
+
+ใช้ **GitHub Codespaces** ซึ่งใช้บัญชี GitHub ที่มีอยู่แล้ว รันบนคลาวด์ ไม่ต้องลงอะไรบนเครื่อง
+และเนื่องจาก Codespace มี Docker มาให้ จึงใช้ `compose.yaml` ในรีโปได้เลย ได้ **SQL Server จริง**
+(เงินเป็น `decimal` ไม่ใช่ float แบบโหมด SQLite) และพอร์ตที่ forward ออกมาเป็น **HTTPS**
+
+1. บน GitHub กด **Code → Codespaces → Create codespace on main**
+2. ในเทอร์มินัลของ Codespace รอให้พอร์ตขึ้นมาแล้วดู URL ในแท็บ **PORTS** จากนั้น
+
+   ```bash
+   bash scripts/make-demo-env.sh https://<ชื่อ-codespace>-8080.app.github.dev
+   docker compose up --build -d
+   curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/health
+   ```
+
+   สคริปต์จะสุ่มรหัสผ่านทุกตัวให้ แล้วพิมพ์ชื่อผู้ใช้กับรหัสออกมาให้เอาไปส่งต่อ
+3. ในแท็บ **PORTS** คลิกขวาพอร์ต 8080 → **Port Visibility → Public** แล้วส่งลิงก์ให้ผู้ที่จะทดลองใช้
+4. เลิกใช้แล้วรื้อทิ้ง: `docker compose down -v && rm .env` แล้วลบ Codespace
+
+> **ข้อควรรู้ก่อนส่งลิงก์ให้คนอื่น**
+> ระบบมีผู้ใช้เดียวและสิทธิ์เต็ม ใครเข้าได้จะแก้ค่าเช่า ลบเลขมิเตอร์ และบันทึกการชำระเงินได้ทั้งหมด
+> ยังไม่มีโหมดอ่านอย่างเดียว จึงเหมาะกับการโชว์ที่รื้อทิ้งทีหลังเท่านั้น ไม่ใช่ข้อมูลจริง
+> และ Codespace จะหยุดเองเมื่อไม่มีการใช้งาน ลิงก์จะเข้าไม่ได้จนกว่าจะเปิดใหม่
+
 ## นำขึ้นเซิร์ฟเวอร์
 
 ดู [DEPLOYMENT.md](DEPLOYMENT.md) มีสองทางให้เลือก: MonsterASP.NET (IIS shared hosting ตามที่เลือกไว้ใน CLAUDE.md ข้อ 10)
