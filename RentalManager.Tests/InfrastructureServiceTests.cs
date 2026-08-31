@@ -64,6 +64,33 @@ public sealed class InfrastructureServiceTests
     }
 
     [Fact]
+    public void SlipRoot_ResolvesRelativePathsAgainstTheAppFolderNotTheCurrentDirectory()
+    {
+        var contentRoot = Path.Combine(Path.GetTempPath(), "rental-content-root");
+
+        // relative path ต้องอิงโฟลเดอร์ของแอป เพราะบน IIS current directory ไม่แน่นอน
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine(contentRoot, "slips")),
+            RentalManager.Infrastructure.DependencyInjection.ResolveSlipRoot("slips", contentRoot));
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine(contentRoot, "slips")),
+            RentalManager.Infrastructure.DependencyInjection.ResolveSlipRoot(null, contentRoot));
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine(contentRoot, "..", "data", "slips")),
+            RentalManager.Infrastructure.DependencyInjection.ResolveSlipRoot(
+                Path.Combine("..", "data", "slips"), contentRoot));
+
+        // absolute path ต้องใช้ตามที่ตั้งไว้ ไม่ถูกเอาไปต่อท้าย content root
+        var absolute = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "rental-slips"));
+        Assert.Equal(absolute, RentalManager.Infrastructure.DependencyInjection.ResolveSlipRoot(absolute, contentRoot));
+
+        // ไม่มี content root ให้ถอยไปใช้โฟลเดอร์ของ assembly ไม่ใช่ current directory
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "slips")),
+            RentalManager.Infrastructure.DependencyInjection.ResolveSlipRoot("slips", null));
+    }
+
+    [Fact]
     public async Task ReceiptAndSettlement_AreValidPdfDocuments()
     {
         var ct = TestContext.Current.CancellationToken;

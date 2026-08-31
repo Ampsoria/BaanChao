@@ -1,0 +1,33 @@
+name: Keepalive
+
+# free tier พักแอปเมื่อไม่มีคนใช้ ทำให้ข้อความแรกที่ลูกบ้านทักเข้า LINE
+# อาจช้าเกิน timeout ของ webhook แล้วหาย (ดู CLAUDE.md ข้อ 10)
+# ping /health เป็นระยะเพื่อลดโอกาสนั้น
+#
+# GitHub cron เป็น best-effort อาจคลาดเคลื่อนหลายนาทีในช่วงที่คนใช้เยอะ
+# ถ้ายังเจอปัญหาบ่อยให้ย้ายไปแพ็กเกจที่ไม่หลับแทนการถี่ขึ้น
+#
+# ตั้ง repository variable ชื่อ PUBLIC_BASE_URL ก่อนใช้งาน
+# (Settings -> Secrets and variables -> Actions -> Variables)
+# ถ้ายังไม่ตั้ง workflow จะข้ามไปเฉยๆ ไม่ทำให้ CI แดง
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health endpoint
+        env:
+          BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+        run: |
+          if [ -z "$BASE_URL" ]; then
+            echo "ยังไม่ได้ตั้ง repository variable PUBLIC_BASE_URL — ข้ามการ ping"
+            exit 0
+          fi
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${BASE_URL%/}/health" || echo "000")
+          echo "GET ${BASE_URL%/}/health -> $CODE"
+          # แอปที่เพิ่งตื่นอาจตอบช้าหรือพลาดรอบแรก จึงไม่ทำให้ job แดง
+          # workflow นี้มีหน้าที่ปลุกแอป ไม่ใช่เฝ้าสถานะ

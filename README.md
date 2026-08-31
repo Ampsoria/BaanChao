@@ -66,6 +66,11 @@ dotnet run --project RentalManager.Api
 dotnet ef database update --project RentalManager.Infrastructure --startup-project RentalManager.Api
 ```
 
+## นำขึ้นเซิร์ฟเวอร์
+
+ดู [DEPLOYMENT.md](DEPLOYMENT.md) มีสองทางให้เลือก: MonsterASP.NET (IIS shared hosting ตามที่เลือกไว้ใน CLAUDE.md ข้อ 10)
+หรือ Docker/Linux ตามหัวข้อถัดไป — ไฟล์ Docker, `scripts/backup-slips.sh` และ `deploy/cron/` เป็นของทางหลังเท่านั้น
+
 ## รันด้วย Docker Compose
 
 ```bash

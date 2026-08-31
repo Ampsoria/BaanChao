@@ -1,0 +1,68 @@
+name: Deploy
+
+# สั่งเองเท่านั้น ไม่ deploy อัตโนมัติตอน push เพื่อไม่ให้ขึ้น production โดยไม่ตั้งใจ
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'พิมพ์ deploy เพื่อยืนยันว่าต้องการขึ้น production'
+        required: true
+        default: ''
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  deploy:
+    # Web Deploy (msdeploy.exe) มีอยู่ใน image ของ Windows runner
+    runs-on: windows-latest
+
+    steps:
+      - name: Check confirmation
+        shell: bash
+        run: |
+          if [ "${{ inputs.confirm }}" != "deploy" ]; then
+            echo "ยกเลิก: ต้องพิมพ์คำว่า deploy เพื่อยืนยัน" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      # ขึ้น production ต้องผ่านเทสก่อนเสมอ เทส SQL จะถูกข้ามที่นี่
+      # เพราะไม่มี SQL Server — ชุดนั้นรันครบแล้วใน workflow CI
+      - name: Build and test
+        run: |
+          dotnet restore RentalManager.slnx
+          dotnet build RentalManager.slnx --no-restore -warnaserror
+          dotnet test RentalManager.slnx --no-build
+
+      - name: Publish
+        run: dotnet publish RentalManager.Api/RentalManager.Api.csproj -c Release -o publish
+
+      # -skip กันไม่ให้ลบโฟลเดอร์ข้อมูลบนเซิร์ฟเวอร์
+      # สลิปคือหลักฐานการชำระเงิน ห้ามหายตอน deploy
+      - name: Web Deploy
+        shell: pwsh
+        env:
+          MSDEPLOY_URL: ${{ secrets.MSDEPLOY_URL }}
+          MSDEPLOY_SITE: ${{ secrets.MSDEPLOY_SITE }}
+          MSDEPLOY_USERNAME: ${{ secrets.MSDEPLOY_USERNAME }}
+          MSDEPLOY_PASSWORD: ${{ secrets.MSDEPLOY_PASSWORD }}
+        run: |
+          if (-not $env:MSDEPLOY_URL) { throw "ยังไม่ได้ตั้ง secret MSDEPLOY_URL (ดู DEPLOYMENT.md)" }
+          $msdeploy = "${env:ProgramFiles}\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          if (-not (Test-Path $msdeploy)) { throw "ไม่พบ msdeploy.exe ที่ $msdeploy" }
+          & $msdeploy `
+            -verb:sync `
+            -source:contentPath="$(Resolve-Path publish)" `
+            -dest:contentPath="$env:MSDEPLOY_SITE",computerName="$env:MSDEPLOY_URL",userName="$env:MSDEPLOY_USERNAME",password="$env:MSDEPLOY_PASSWORD",authType=Basic `
+            -enableRule:DoNotDeleteRule `
+            -skip:Directory="\\data" `
+            -skip:Directory="\\slips" `
+            -allowUntrusted
+          if ($LASTEXITCODE -ne 0) { throw "msdeploy ล้มเหลว (exit $LASTEXITCODE)" }
