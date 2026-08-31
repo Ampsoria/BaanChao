@@ -7,12 +7,36 @@
 # ใช้สำหรับ demo ที่รื้อทิ้งทีหลังเท่านั้น ไม่ใช่ของ production
 set -euo pipefail
 
+APP_PORT=8080
 BASE_URL="${1:-}"
+
+# ใน Codespaces หา URL ของตัวเองได้จาก environment ไม่ต้องให้พิมพ์เอง
+if [ -z "$BASE_URL" ] && [ -n "${CODESPACE_NAME:-}" ]; then
+  BASE_URL="https://${CODESPACE_NAME}-${APP_PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
+  echo "ตรวจพบ Codespace: ใช้ $BASE_URL"
+fi
+
 if [ -z "$BASE_URL" ]; then
-  echo "ใช้: bash scripts/make-demo-env.sh <PUBLIC_BASE_URL>" >&2
-  echo "ตัวอย่าง: bash scripts/make-demo-env.sh https://xxxx-8080.app.github.dev" >&2
+  echo "ใช้: bash scripts/make-demo-env.sh [PUBLIC_BASE_URL]" >&2
+  echo "ใน Codespaces ไม่ต้องใส่ URL สคริปต์หาเอง" >&2
+  echo "นอก Codespaces ให้ใส่ URL จริง เช่น https://myapp.example.com" >&2
   exit 1
 fi
+
+# กันพิมพ์ตัวอย่างมาตรงๆ โดยไม่ได้แทนค่าจริง
+case "$BASE_URL" in
+  *'<'* | *'>'* | *'ชื่อ'* | *xxxx*)
+    echo "URL ยังเป็นตัวอย่างอยู่: $BASE_URL" >&2
+    echo "ใน Codespaces ให้สั่งโดยไม่ใส่ URL เลย สคริปต์จะหาให้เอง" >&2
+    exit 1
+    ;;
+esac
+
+case "$BASE_URL" in
+  http://* | https://*) ;;
+  *) echo "URL ต้องขึ้นต้นด้วย http:// หรือ https:// (ได้: $BASE_URL)" >&2; exit 1 ;;
+esac
+
 BASE_URL="${BASE_URL%/}"
 
 ENV_FILE="$(cd "$(dirname "$0")/.." && pwd)/.env"

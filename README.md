@@ -98,15 +98,20 @@ dotnet run --project RentalManager.Api
 (เงินเป็น `decimal` ไม่ใช่ float แบบโหมด SQLite) และพอร์ตที่ forward ออกมาเป็น **HTTPS**
 
 1. บน GitHub กด **Code → Codespaces → Create codespace on main**
-2. ในเทอร์มินัลของ Codespace รอให้พอร์ตขึ้นมาแล้วดู URL ในแท็บ **PORTS** จากนั้น
+2. ในเทอร์มินัลของ Codespace สั่งสองบรรทัดนี้ **ไม่ต้องแก้อะไร ไม่ต้องใส่ URL**
+   (สคริปต์อ่านชื่อ Codespace จาก environment เอง)
 
    ```bash
-   bash scripts/make-demo-env.sh https://<ชื่อ-codespace>-8080.app.github.dev
+   bash scripts/make-demo-env.sh
    docker compose up --build -d
-   curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/health
    ```
 
    สคริปต์จะสุ่มรหัสผ่านทุกตัวให้ แล้วพิมพ์ชื่อผู้ใช้กับรหัสออกมาให้เอาไปส่งต่อ
+   รอ build สักพัก แล้วตรวจว่าขึ้นจริงด้วย
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/health   # ต้องได้ 200
+   ```
 3. ในแท็บ **PORTS** คลิกขวาพอร์ต 8080 → **Port Visibility → Public** แล้วส่งลิงก์ให้ผู้ที่จะทดลองใช้
 4. เลิกใช้แล้วรื้อทิ้ง: `docker compose down -v && rm .env` แล้วลบ Codespace
 
