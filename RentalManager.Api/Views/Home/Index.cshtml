@@ -1,5 +1,6 @@
 @{
   Layout = null;
+  var appVersion = ViewData["AppVersion"] as string ?? "1.0.0";
 }
 <!doctype html>
 <html lang="th">
@@ -7,8 +8,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Amp Rental</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/features.css">
+  <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
   <div id="login" class="login-shell hidden">
@@ -19,6 +24,7 @@
       <label>รหัสผ่าน<input name="password" type="password" autocomplete="current-password" required></label>
       <button class="primary" type="submit">เข้าสู่ระบบ</button>
       <p id="login-error" class="error"></p>
+      <div class="login-meta"><span>Version @appVersion</span><span>Developed by Ampsoria</span></div>
     </form>
   </div>
 
@@ -103,6 +109,11 @@
       <section id="audit-page" class="page hidden">
         <div class="panel table-wrap"><table><thead><tr><th>เวลา</th><th>ผู้แก้</th><th>รายการ</th><th>ค่าเดิม</th><th>ค่าใหม่</th></tr></thead><tbody id="audit-rows"></tbody></table></div>
       </section>
+
+      <footer class="app-footer">
+        <div class="footer-product"><span class="footer-mark">AR</span><div><strong>Amp Rental</strong><span>Version @appVersion</span></div></div>
+        <p>Developed by <a href="https://github.com/Ampsoria" target="_blank" rel="noopener noreferrer">Ampsoria</a></p>
+      </footer>
     </main>
   </div>
 

@@ -7,8 +7,12 @@ public sealed class RentalDbContextFactory : IDesignTimeDbContextFactory<RentalD
 {
     public RentalDbContext CreateDbContext(string[] args)
     {
+        // คำสั่ง EF ที่ต้องเชื่อมต่อฐานจริงให้รับ connection string จาก environment
+        // ส่วน fallback มีไว้สร้าง/เทียบ model เท่านั้น และไม่มีรหัสผ่านตัวอย่างฝังใน source code
+        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__RentalDb")
+            ?? "Server=localhost;Database=RentalManager;Integrated Security=true;TrustServerCertificate=True";
         var options = new DbContextOptionsBuilder<RentalDbContext>()
-            .UseSqlServer("Server=localhost,1433;Database=RentalManager;User Id=sa;Password=DesignTimeOnly!123;TrustServerCertificate=True")
+            .UseSqlServer(connectionString)
             .Options;
         return new RentalDbContext(options);
     }

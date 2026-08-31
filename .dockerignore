@@ -7,6 +7,7 @@
 .vs/
 .idea/
 .vscode/
+.DS_Store
 slips/
 TestResults/
 coverage/

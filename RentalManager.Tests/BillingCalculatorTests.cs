@@ -1,3 +1,4 @@
+using System.Globalization;
 using RentalManager.Core.Services;
 using Xunit;
 using RentalManager.Core.Entities;
@@ -181,7 +182,9 @@ public sealed class BillingCalculatorTests
     public void RefundAndAmountDue_AreNeverBothPositive(string moveOut, int waterFinal, int electricFinal)
     {
         var result = BillingCalculator.CalculateMoveOut(
-            new DateOnly(2026, 1, 1), DateOnly.Parse(moveOut), 5,
+            new DateOnly(2026, 1, 1),
+            DateOnly.ParseExact(moveOut, "yyyy-MM-dd", CultureInfo.InvariantCulture),
+            5,
             2_000, 100, waterFinal, 500, electricFinal, 20, 12, 0);
 
         Assert.False(result.RefundAmount > 0 && result.AmountDueFromTenant > 0);

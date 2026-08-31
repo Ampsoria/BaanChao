@@ -16,10 +16,14 @@
 
 ## ทาง A — MonsterASP.NET
 
+> **ตรวจแพ็กเกจก่อนใช้จริง:** หน้า pricing ของผู้ให้บริการอาจเปลี่ยนได้ และปัจจุบันแยก HTTPS
+> ออกจาก Free tier ในตารางเปรียบเทียบ ห้ามนำระบบ Admin หรือ LINE webhook ขึ้น HTTP ล้วน
+> ถ้า site ฟรีที่ได้รับไม่มี HTTPS ให้เปลี่ยนเป็นแพ็กเกจ/ผู้ให้บริการที่มี HTTPS ก่อนกรอกข้อมูลจริง
+
 ### 1. เตรียมฝั่งโฮสต์
 
-1. สมัคร free tier แล้วสร้าง site — จะได้ subdomain `.runasp.net` หรือ `.tryasp.net`
-2. เปิด HTTPS (Let's Encrypt) ในแผงควบคุม **ต้องทำก่อนตั้ง LINE webhook**
+1. สมัครและสร้าง site — จะได้ subdomain `.runasp.net` หรือ `.tryasp.net`
+2. ยืนยันว่าแพ็กเกจเปิด HTTPS ได้ แล้วเปิดใบรับรองในแผงควบคุม **ต้องทำก่อนกรอกข้อมูลจริงหรือตั้ง LINE webhook**
 3. สร้างฐานข้อมูล MSSQL แล้วจดค่า connection string ไว้
 4. ดาวน์โหลด publish profile (`.PublishSettings`) สำหรับ Web Deploy
 

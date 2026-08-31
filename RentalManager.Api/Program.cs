@@ -71,6 +71,13 @@ builder.Services.AddHostedService<RentalManager.Api.Services.BillingAutomationWo
 var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
+    var configurationIssues = ProductionConfigurationValidator.FindIssues(app.Configuration);
+    if (configurationIssues.Count > 0)
+        app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup").LogError(
+            "Production configuration ยังไม่พร้อม: {Issues}", string.Join("; ", configurationIssues));
+}
+if (!app.Environment.IsDevelopment())
+{
     app.UseHsts();
     app.UseHttpsRedirection();
 }

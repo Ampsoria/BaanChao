@@ -1,8 +1,15 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
+COPY Directory.Build.props RentalManager.slnx ./
+COPY RentalManager.Core/RentalManager.Core.csproj RentalManager.Core/
+COPY RentalManager.Infrastructure/RentalManager.Infrastructure.csproj RentalManager.Infrastructure/
+COPY RentalManager.Api/RentalManager.Api.csproj RentalManager.Api/
+COPY RentalManager.Tests/RentalManager.Tests.csproj RentalManager.Tests/
+RUN --mount=type=cache,id=baanchao-nuget,target=/root/.nuget/packages \
+    dotnet restore RentalManager.slnx -m:1 /p:NuGetAudit=false
 COPY . .
-RUN dotnet restore RentalManager.slnx -m:1 /p:NuGetAudit=false
-RUN dotnet publish RentalManager.Api/RentalManager.Api.csproj -c Release -o /app/publish --no-restore
+RUN --mount=type=cache,id=baanchao-nuget,target=/root/.nuget/packages \
+    dotnet publish RentalManager.Api/RentalManager.Api.csproj -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app

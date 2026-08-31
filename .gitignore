@@ -5,6 +5,7 @@ obj/
 .vscode/
 *.user
 *.suo
+.DS_Store
 appsettings.Development.json
 .env
 .env.*
