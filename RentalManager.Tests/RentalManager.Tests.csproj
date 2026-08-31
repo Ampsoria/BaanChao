@@ -7,6 +7,7 @@
     <ProjectReference Include="../RentalManager.Core/RentalManager.Core.csproj" />
     <ProjectReference Include="../RentalManager.Infrastructure/RentalManager.Infrastructure.csproj" />
     <ProjectReference Include="../RentalManager.Api/RentalManager.Api.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />

@@ -4,6 +4,7 @@ using RentalManager.Infrastructure.Data;
 using RentalManager.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
 using RentalManager.Core.Interfaces;
+using RentalManager.Core.Services;
 using RentalManager.Infrastructure.Documents;
 using RentalManager.Infrastructure.PromptPay;
 using RentalManager.Infrastructure.Slip;
@@ -20,6 +21,13 @@ public static class DependencyInjection
         services.AddDbContext<RentalDbContext>(options =>
             options.UseSqlServer(connectionString));
         services.AddScoped<RentalOperationsService>();
+        services.Configure<BillingOptions>(options =>
+        {
+            if (byte.TryParse(configuration["Billing:DueDay"], out var dueDay) && dueDay > 0)
+                options.DueDay = dueDay;
+            if (byte.TryParse(configuration["Billing:MinimumStayMonths"], out var minimumStay))
+                options.MinimumStayMonths = minimumStay;
+        });
         services.Configure<FileStorageOptions>(options =>
         {
             options.SlipRoot = configuration["Storage:SlipRoot"] ?? "slips";

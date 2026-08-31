@@ -87,7 +87,9 @@ public sealed class BillingAutomationWorker(
         var baseUrl = configuration["PublicLinks:BaseUrl"]?.TrimEnd('/');
         if (string.IsNullOrWhiteSpace(baseUrl)) return;
         var invoices = await db.Invoices.Include(x => x.Payments).Include(x => x.Room).Include(x => x.Tenant)
-            .Where(x => x.Status != InvoiceStatus.Paid && x.Status != InvoiceStatus.Void && x.Tenant.LineUserId != null)
+            // ส่งอัตโนมัติเฉพาะผู้เช่าที่เลือกรับบิลทาง LINE — คนที่รับกระดาษให้ Amp พิมพ์บิลเอง
+            .Where(x => x.Status != InvoiceStatus.Paid && x.Status != InvoiceStatus.Void
+                        && x.Tenant.LineUserId != null && x.Tenant.PreferredChannel == TenantChannels.Line)
             .ToListAsync(ct);
         foreach (var invoice in invoices)
         {

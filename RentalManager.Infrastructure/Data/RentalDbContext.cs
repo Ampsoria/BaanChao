@@ -47,9 +47,14 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
     private static void ConfigureTenant(ModelBuilder modelBuilder)
     {
         var entity = modelBuilder.Entity<Tenant>();
-        entity.ToTable("Tenant", table => table.HasCheckConstraint("CK_Tenant_Deposit", "[DepositAmount] >= 0"));
+        entity.ToTable("Tenant", table =>
+        {
+            table.HasCheckConstraint("CK_Tenant_Deposit", "[DepositAmount] >= 0");
+            table.HasCheckConstraint("CK_Tenant_Channel", "[PreferredChannel] IN ('Line','Paper')");
+        });
         entity.HasKey(x => x.TenantId);
         entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+        entity.Property(x => x.PreferredChannel).HasMaxLength(10).HasDefaultValue(TenantChannels.Paper);
         entity.Property(x => x.Phone).HasMaxLength(20);
         entity.Property(x => x.LineUserId).HasMaxLength(64);
         entity.Property(x => x.DepositAmount).HasPrecision(10, 2);
@@ -114,9 +119,19 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         {
             table.HasCheckConstraint("CK_Invoice_Days", "[DaysCharged] > 0 AND [DaysCharged] <= [DaysInPeriod]");
             table.HasCheckConstraint("CK_Invoice_Units", "[WaterUnits] >= 0 AND [ElectricUnits] >= 0");
+            // ค่าน้ำ-ค่าไฟเก็บย้อนหลังเสมอ: UtilityPeriod ต้องเป็นเดือนก่อน BillingPeriod พอดี
+            table.HasCheckConstraint(
+                "CK_Invoice_UtilityPeriod",
+                "[UtilityPeriod] IS NULL OR [UtilityPeriod] = CONVERT(char(7), "
+                + "DATEADD(MONTH, -1, CONVERT(date, [BillingPeriod] + '-01', 126)), 126)");
+            // ไม่มีเลขมิเตอร์ของงวดก่อน = ห้ามมีหน่วยน้ำ-ไฟบนบิล
+            table.HasCheckConstraint(
+                "CK_Invoice_UtilityUnits",
+                "[UtilityPeriod] IS NOT NULL OR ([WaterUnits] = 0 AND [ElectricUnits] = 0)");
         });
         entity.HasKey(x => x.InvoiceId);
         entity.Property(x => x.BillingPeriod).HasColumnType("char(7)").IsRequired();
+        entity.Property(x => x.UtilityPeriod).HasColumnType("char(7)");
         entity.Property(x => x.IssuedAt).HasDefaultValueSql("SYSUTCDATETIME()");
         entity.Property(x => x.IsProrated)
             .HasComputedColumnSql("CONVERT(bit, CASE WHEN [DaysCharged] <> [DaysInPeriod] THEN 1 ELSE 0 END)", stored: true);

@@ -6,7 +6,8 @@ public sealed record MoveInCommand(
     string? Phone,
     DateOnly MovedInAt,
     decimal WaterReading,
-    decimal ElectricReading);
+    decimal ElectricReading,
+    string PreferredChannel = "Paper");
 
 public sealed record MoveOutCommand(
     int TenantId,

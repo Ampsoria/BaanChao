@@ -65,6 +65,8 @@ public sealed class LineWebhookController(
             }
             linkCode.UsedAt = DateTime.UtcNow;
             linkCode.Tenant.LineUserId = userId;
+            // ผู้เช่าผูกไลน์เอง = เลือกรับบิลทางไลน์ ผู้ดูแลเปลี่ยนกลับเป็น Paper ได้ทีหลัง
+            linkCode.Tenant.PreferredChannel = TenantChannels.Line;
             db.AuditLogs.Add(new AuditLog
             {
                 EntityName = "Tenant",

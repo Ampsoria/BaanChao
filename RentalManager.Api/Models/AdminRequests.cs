@@ -18,6 +18,7 @@ public sealed record CreatePolicyRequest(DateOnly EffectiveFrom, byte GraceDays,
 public sealed record GenerateInvoicesRequest(string BillingPeriod);
 public sealed record UpdateMeterRequest(DateOnly ReadAt, decimal WaterCurrent, decimal ElectricCurrent);
 public sealed record MoveInPreviewRequest(int RoomId, DateOnly MovedInAt);
+public sealed record UpdateChannelRequest(string PreferredChannel);
 public sealed record MoveOutRequest(DateOnly MoveOutDate, decimal WaterFinal, decimal ElectricFinal, IReadOnlyCollection<SettlementDeductionQuote>? Deductions);
 public sealed record PreviewInvoiceRequest(
     int RoomId, string BillingPeriod, DateOnly? MovedInAt,

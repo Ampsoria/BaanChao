@@ -33,6 +33,22 @@ public sealed class TenantsController(RentalOperationsService service, RentalDbC
         return Ok(await service.MoveOutAsync(command, UserName, ct));
     }
 
+    [HttpPatch("{id:int}/channel")]
+    public async Task<IActionResult> UpdateChannel(int id, UpdateChannelRequest request, CancellationToken ct)
+    {
+        if (!TenantChannels.IsValid(request.PreferredChannel))
+            return BadRequest(new { message = "ช่องทางรับบิลต้องเป็น Line หรือ Paper" });
+        var tenant = await db.Tenants.SingleOrDefaultAsync(x => x.TenantId == id && x.MovedOutAt == null, ct);
+        if (tenant is null) return NotFound();
+        if (request.PreferredChannel == TenantChannels.Line && string.IsNullOrWhiteSpace(tenant.LineUserId))
+            return BadRequest(new { message = "ผู้เช่ายังไม่ได้ผูก LINE จึงตั้งเป็นช่องทาง Line ไม่ได้" });
+        var old = tenant.PreferredChannel;
+        tenant.PreferredChannel = request.PreferredChannel;
+        db.AuditLogs.Add(Audit("Tenant", id.ToString(), "PreferredChannel", old, tenant.PreferredChannel));
+        await db.SaveChangesAsync(ct);
+        return Ok(new { message = $"ตั้งช่องทางรับบิลเป็น {tenant.PreferredChannel} แล้ว", tenant.PreferredChannel });
+    }
+
     [HttpPost("{id:int}/line-link-code")]
     public async Task<IActionResult> CreateLineLinkCode(int id, CancellationToken ct)
     {

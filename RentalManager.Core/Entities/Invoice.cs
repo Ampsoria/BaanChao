@@ -8,6 +8,10 @@ public sealed class Invoice
     public int RoomId { get; set; }
     public int TenantId { get; set; }
     public required string BillingPeriod { get; set; }
+
+    // เดือนของค่าน้ำ-ค่าไฟ (ย้อนหลัง 1 เดือนจาก BillingPeriod)
+    // NULL = บิลใบแรกตอนย้ายเข้า หรืองวดนั้นยังไม่มีเลขมิเตอร์
+    public string? UtilityPeriod { get; set; }
     public DateTime IssuedAt { get; set; }
     public DateOnly DueDate { get; set; }
     public DateOnly PeriodStart { get; set; }

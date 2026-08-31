@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  # รหัสผ่านนี้ใช้กับ SQL Server ชั่วคราวใน CI เท่านั้น ไม่ได้ใช้ที่อื่น
+  SA_PASSWORD: Ci_Rental_2026!
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: Ci_Rental_2026!
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Wait for SQL Server
+        run: |
+          for i in $(seq 1 60); do
+            if docker run --rm --network host mcr.microsoft.com/mssql-tools18 \
+              /opt/mssql-tools18/bin/sqlcmd -S 127.0.0.1 -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then
+              echo "SQL Server is ready after ${i} attempt(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "SQL Server did not become ready in time." >&2
+          exit 1
+
+      - name: Restore
+        run: dotnet restore RentalManager.slnx
+
+      - name: Build
+        run: dotnet build RentalManager.slnx --no-restore -warnaserror
+
+      # ตั้ง RENTAL_TEST_SQLSERVER ให้ SqlServerIntegrationTests รันจริง ไม่ถูกข้าม
+      - name: Test
+        env:
+          RENTAL_TEST_SQLSERVER: "Server=127.0.0.1,1433;Database=RentalManagerIntegration;User Id=sa;Password=Ci_Rental_2026!;TrustServerCertificate=True"
+        run: dotnet test RentalManager.slnx --no-build --logger "console;verbosity=normal"
+
+      - name: Check admin script syntax
+        run: node --check RentalManager.Api/wwwroot/app.js
+
+      - name: Validate compose file
+        run: |
+          cp .env.example .env
+          docker compose config >/dev/null
+
+      - name: Verify no pending EF model changes
+        run: |
+          dotnet tool restore
+          dotnet ef migrations has-pending-model-changes \
+            --project RentalManager.Infrastructure \
+            --startup-project RentalManager.Api

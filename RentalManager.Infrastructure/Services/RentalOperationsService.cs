@@ -1,14 +1,28 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using RentalManager.Core.Entities;
 using RentalManager.Core.Services;
 using RentalManager.Infrastructure.Data;
 
 namespace RentalManager.Infrastructure.Services;
 
-public sealed partial class RentalOperationsService(RentalDbContext db)
+public sealed partial class RentalOperationsService(RentalDbContext db, IOptions<BillingOptions> billingOptions)
 {
+    private readonly BillingOptions _billing = billingOptions.Value;
+
+    /// <summary>
+    /// งวดค่าน้ำ-ค่าไฟของบิล = เดือนก่อนงวดค่าเช่าเสมอ
+    /// เพราะเดินจดมิเตอร์วันสิ้นเดือนแล้วออกบิลวันที่ 1 (CLAUDE.md ข้อ 4)
+    /// </summary>
+    public static string PreviousPeriod(string billingPeriod)
+    {
+        EnsureBillingPeriod(billingPeriod);
+        var start = DateOnly.ParseExact(billingPeriod + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        return start.AddMonths(-1).ToString("yyyy-MM", CultureInfo.InvariantCulture);
+    }
+
     public async Task<MoveInQuote> PreviewMoveInAsync(int roomId, DateOnly movedInAt, CancellationToken cancellationToken)
     {
         var room = await db.Rooms.AsNoTracking().SingleOrDefaultAsync(x => x.RoomId == roomId, cancellationToken)
@@ -24,6 +38,8 @@ public sealed partial class RentalOperationsService(RentalDbContext db)
             throw new RentalOperationException("ชื่อต้องยาวไม่เกิน 200 และเบอร์โทรไม่เกิน 20 ตัวอักษร");
         if (command.WaterReading < 0 || command.ElectricReading < 0)
             throw new RentalOperationException("เลขมิเตอร์ต้องไม่ติดลบ");
+        if (!TenantChannels.IsValid(command.PreferredChannel))
+            throw new RentalOperationException("ช่องทางรับบิลต้องเป็น Line หรือ Paper");
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var room = await db.Rooms.SingleOrDefaultAsync(x => x.RoomId == command.RoomId && x.IsActive, cancellationToken)
@@ -43,7 +59,8 @@ public sealed partial class RentalOperationsService(RentalDbContext db)
             MovedInAt = command.MovedInAt,
             DepositAmount = room.MonthlyRent,
             DepositReceivedAt = command.MovedInAt,
-            MinimumStayMonths = 5
+            MinimumStayMonths = _billing.MinimumStayMonths,
+            PreferredChannel = command.PreferredChannel
         };
         db.Tenants.Add(tenant);
         await db.SaveChangesAsync(cancellationToken);
@@ -63,6 +80,8 @@ public sealed partial class RentalOperationsService(RentalDbContext db)
             RoomId = room.RoomId,
             TenantId = tenant.TenantId,
             BillingPeriod = period,
+            // บิลใบแรกตอนย้ายเข้าไม่มีค่าน้ำ-ค่าไฟ เพราะเพิ่งจดเลขตั้งต้น
+            UtilityPeriod = null,
             DueDate = command.MovedInAt,
             PeriodStart = quote.PeriodStart,
             PeriodEnd = quote.PeriodEnd,
@@ -89,8 +108,12 @@ public sealed partial class RentalOperationsService(RentalDbContext db)
             throw new RentalOperationException("เลขมิเตอร์ต้องไม่ติดลบ");
         if (!await db.Rooms.AnyAsync(x => x.RoomId == command.RoomId && x.IsActive, cancellationToken))
             throw new RentalOperationException("ไม่พบห้องพักที่เปิดใช้งาน");
-        if (await db.MeterReadings.AnyAsync(x => x.RoomId == command.RoomId && x.BillingPeriod == command.BillingPeriod, cancellationToken))
-            throw new RentalOperationException("ห้องนี้มีเลขมิเตอร์ของงวดดังกล่าวแล้ว");
+        var existingReading = await db.MeterReadings.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.RoomId == command.RoomId && x.BillingPeriod == command.BillingPeriod, cancellationToken);
+        if (existingReading is not null)
+            throw new RentalOperationException(
+                $"ห้องนี้มีเลขมิเตอร์งวด {command.BillingPeriod} แล้ว (น้ำ {existingReading.WaterCurrent:N2} ไฟ {existingReading.ElectricCurrent:N2}) "
+                + "ถ้าเป็นห้องที่เพิ่งย้ายเข้าเดือนนี้ ให้แก้เลขปัจจุบันของแถวเดิมแทนการเพิ่มแถวใหม่");
 
         var previous = await db.MeterReadings.AsNoTracking()
             .Where(x => x.RoomId == command.RoomId && x.ReadAt <= command.ReadAt)
@@ -127,11 +150,14 @@ public sealed partial class RentalOperationsService(RentalDbContext db)
             .OrderByDescending(x => x.EffectiveFrom)
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new RentalOperationException("ไม่พบนโยบายการวางบิลที่มีผลในงวดนี้");
-        var dueDay = Math.Min(policy.GraceDays, (byte)periodEnd.Day);
+        var graceDays = policy.GraceDays > 0 ? policy.GraceDays : _billing.DueDay;
+        var dueDay = Math.Min(graceDays, (byte)periodEnd.Day);
         var dueDate = new DateOnly(periodStart.Year, periodStart.Month, dueDay);
 
+        // บิลที่ออกวันที่ 1 ต.ค. คิดค่าเช่าเดือน ต.ค. แต่ค่าน้ำ-ค่าไฟของเดือน ก.ย.
+        var utilityPeriod = PreviousPeriod(billingPeriod);
         var readings = await db.MeterReadings.AsNoTracking()
-            .Where(x => x.BillingPeriod == billingPeriod)
+            .Where(x => x.BillingPeriod == utilityPeriod)
             .ToDictionaryAsync(x => x.RoomId, cancellationToken);
         var tenants = await db.Tenants.Include(x => x.Room)
             .Where(x => x.Room.IsActive && x.MovedInAt <= periodEnd && (x.MovedOutAt == null || x.MovedOutAt >= periodStart))
@@ -141,22 +167,31 @@ public sealed partial class RentalOperationsService(RentalDbContext db)
         var existingKeys = existing.Select(x => (x.RoomId, x.TenantId)).ToHashSet();
 
         var created = 0;
+        var withoutUtilities = new List<string>();
         foreach (var tenant in tenants)
         {
+            // ออกบิลซ้ำงวดเดิมต้อง idempotent — ข้ามใบที่มีอยู่แล้วเงียบๆ (CLAUDE.md ข้อ 12)
             if (existingKeys.Contains((tenant.RoomId, tenant.TenantId)))
                 continue;
-            if (!readings.TryGetValue(tenant.RoomId, out var meter))
-                continue;
+
+            // คิดค่าน้ำ-ค่าไฟให้เฉพาะผู้เช่าที่อยู่มาตลอดงวดก่อนหน้าแล้ว
+            // ผู้เช่าที่เพิ่งเข้าเดือนนี้ต้องไม่โดนหน่วยของคนเก่า (CLAUDE.md ข้อ 4)
+            var occupiedUtilityPeriod = tenant.MovedInAt < periodStart;
+            var meter = occupiedUtilityPeriod && readings.TryGetValue(tenant.RoomId, out var found) ? found : null;
+            if (occupiedUtilityPeriod && meter is null)
+                withoutUtilities.Add(tenant.Room.RoomNumber);
 
             var quote = BillingCalculator.CalculateInvoice(
                 tenant.Room.MonthlyRent, tenant.MovedInAt, periodStart.Year, periodStart.Month,
-                meter.WaterPrev, meter.WaterCurrent, meter.ElectricPrev, meter.ElectricCurrent,
+                meter?.WaterPrev ?? 0, meter?.WaterCurrent ?? 0,
+                meter?.ElectricPrev ?? 0, meter?.ElectricCurrent ?? 0,
                 rate.WaterPerUnit, rate.ElectricPerUnit, rate.TrashPerMonth);
             db.Invoices.Add(new Invoice
             {
                 RoomId = tenant.RoomId,
                 TenantId = tenant.TenantId,
                 BillingPeriod = billingPeriod,
+                UtilityPeriod = meter is null ? null : utilityPeriod,
                 DueDate = dueDate,
                 PeriodStart = quote.ChargeStart,
                 PeriodEnd = quote.PeriodEnd,
@@ -174,8 +209,15 @@ public sealed partial class RentalOperationsService(RentalDbContext db)
 
         AddAudit("Invoice", billingPeriod, "GenerateMonthly", null, created.ToString(CultureInfo.InvariantCulture), changedBy);
         await db.SaveChangesAsync(cancellationToken);
+
+        // ห้ามเงียบ: บอกให้ชัดว่าห้องไหนออกบิลโดยยังไม่มีเลขมิเตอร์ของงวดก่อน
+        var warning = withoutUtilities.Count == 0
+            ? string.Empty
+            : $" (ยังไม่มีเลขมิเตอร์งวด {utilityPeriod} ของห้อง {string.Join(", ", withoutUtilities)} จึงคิดเฉพาะค่าเช่า)";
         return new OperationResult<int>(created,
-            created == 0 ? "ไม่มีบิลใหม่ (ตรวจเลขมิเตอร์หรือบิลที่มีอยู่แล้ว)" : $"สร้างบิลใหม่ {created} ใบ");
+            created == 0
+                ? "ไม่มีบิลใหม่ (ทุกห้องในงวดนี้ออกบิลไปแล้ว)"
+                : $"สร้างบิลใหม่ {created} ใบ{warning}");
     }
 
     public async Task<MoveOutQuote> PreviewMoveOutAsync(MoveOutCommand command, CancellationToken cancellationToken)

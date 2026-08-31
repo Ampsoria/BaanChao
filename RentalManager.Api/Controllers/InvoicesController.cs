@@ -28,7 +28,9 @@ public sealed class InvoicesController(
             x.Room.RoomNumber,
             x.Tenant.FullName,
             x.Tenant.LineUserId,
+            x.Tenant.PreferredChannel,
             x.BillingPeriod,
+            x.UtilityPeriod,
             x.DueDate,
             x.RentAmount,
             x.WaterAmount,
@@ -59,6 +61,34 @@ public sealed class InvoicesController(
     [HttpPost("generate")]
     public async Task<IActionResult> GenerateInvoices(GenerateInvoicesRequest request, CancellationToken ct) =>
         Ok(await service.GenerateMonthlyInvoicesAsync(request.BillingPeriod, UserName, ct));
+
+    /// <summary>บิล PDF สำหรับผู้เช่าที่รับบิลเป็นกระดาษ — ระบบต้องใช้งานได้ครบโดยไม่มี LINE</summary>
+    [HttpGet("{invoiceId:int}/print")]
+    public async Task<IActionResult> Print(int invoiceId, [FromServices] IReceiptService receipts, CancellationToken ct)
+    {
+        var row = await db.Invoices.AsNoTracking().Where(x => x.InvoiceId == invoiceId && x.Status != InvoiceStatus.Void)
+            .Select(x => new
+            {
+                Invoice = x,
+                x.Room.RoomNumber,
+                x.Room.PayeeCents,
+                x.Tenant.FullName,
+                PaidAmount = x.Payments.Where(p => p.VerificationStatus == "Verified").Sum(p => p.PaidAmount)
+            }).SingleOrDefaultAsync(ct);
+        if (row is null) return NotFound();
+        var invoice = row.Invoice;
+        var outstanding = Math.Max(invoice.TotalAmount - row.PaidAmount, 0);
+        var pdf = receipts.CreateInvoice(new InvoiceDocumentData(
+            invoice.InvoiceId, row.RoomNumber, row.FullName,
+            invoice.BillingPeriod, invoice.UtilityPeriod, invoice.PeriodStart, invoice.PeriodEnd,
+            invoice.DaysCharged, invoice.DaysInPeriod, invoice.DueDate,
+            invoice.RentAmount, invoice.WaterUnits, invoice.WaterRate, invoice.WaterAmount,
+            invoice.ElectricUnits, invoice.ElectricRate, invoice.ElectricAmount,
+            invoice.TrashAmount, invoice.AdjustmentAmount, invoice.AdjustmentNote,
+            invoice.TotalAmount, row.PaidAmount, outstanding,
+            outstanding > 0 ? outstanding + row.PayeeCents : 0));
+        return File(pdf, "application/pdf", $"invoice-{invoiceId}.pdf");
+    }
 
     [HttpPost("{invoiceId:int}/send-line")]
     public async Task<IActionResult> SendLine(int invoiceId, CancellationToken ct)
