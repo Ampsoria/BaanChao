@@ -34,6 +34,7 @@
       <nav>
         <button class="nav active" data-page="rooms">ภาพรวมห้อง</button>
         <button class="nav" data-page="meters">จดมิเตอร์</button>
+        <button class="nav" data-page="history">ข้อมูลย้อนหลัง</button>
         <button class="nav" data-page="invoices">บิลและยอดค้าง</button>
         <button class="nav" data-page="settlements">สรุปย้ายออก</button>
         <button class="nav" data-page="rates">ตั้งค่าราคา</button>
@@ -68,6 +69,35 @@
             <button class="primary" type="submit">บันทึกมิเตอร์</button>
           </form>
           <div class="panel"><div class="section-head"><h3>รายการล่าสุด</h3><button class="secondary" data-refresh>รีเฟรช</button></div><div class="table-wrap"><table><thead><tr><th>ห้อง</th><th>งวด</th><th>น้ำ</th><th>ไฟ</th></tr></thead><tbody id="meter-rows"></tbody></table></div></div>
+        </div>
+      </section>
+
+      <section id="history-page" class="page hidden">
+        <div class="history-guide panel">
+          <div><p class="eyebrow">METER HISTORY</p><h3>เลขมิเตอร์ตั้งต้นและย้อนหลัง</h3></div>
+          <p class="muted">กรอกเลขครั้งก่อนและครั้งใหม่ เช่น ไฟ 2,503 → 2,535 ระบบจะคำนวณเป็น 32 หน่วย ข้อมูลที่บันทึกหรือแก้ไขจะลงฐานข้อมูลทันที</p>
+        </div>
+        <div class="split history-layout">
+          <form id="history-form" class="panel form-grid">
+            <div><p class="eyebrow">OLD READING</p><h3>เพิ่มข้อมูลเก่า</h3></div>
+            <label>ห้อง<select name="roomId" id="history-room" required></select></label>
+            <label>งวดมิเตอร์<input name="billingPeriod" type="month" required></label>
+            <label>วันที่จด<input name="readAt" type="date" required></label>
+            <div class="meter-pair">
+              <label>น้ำครั้งก่อน<input name="waterPrevious" type="number" min="0" step="0.01" required></label>
+              <label>น้ำครั้งใหม่<input name="waterCurrent" type="number" min="0" step="0.01" required></label>
+            </div>
+            <div class="meter-pair">
+              <label>ไฟครั้งก่อน<input name="electricPrevious" type="number" min="0" step="0.01" required></label>
+              <label>ไฟครั้งใหม่<input name="electricCurrent" type="number" min="0" step="0.01" required></label>
+            </div>
+            <div id="history-preview" class="preview">กรอกตัวเลขเพื่อดูจำนวนหน่วย</div>
+            <button class="primary" type="submit">บันทึกข้อมูลย้อนหลัง</button>
+          </form>
+          <div class="panel history-list-panel">
+            <div class="section-head"><div><h3>ประวัติเลขมิเตอร์</h3><p class="muted">กดแก้ไขเพื่อแก้ข้อมูลในฐานข้อมูล</p></div><button class="secondary" data-refresh>รีเฟรช</button></div>
+            <div class="table-wrap"><table><thead><tr><th>ห้อง/งวด</th><th>วันที่จด</th><th>น้ำ</th><th>ไฟ</th><th></th></tr></thead><tbody id="history-rows"></tbody></table></div>
+          </div>
         </div>
       </section>
 
@@ -128,6 +158,24 @@
       <label>ค่าเช่าต่อเดือน<input name="monthlyRent" type="number" min="0" step="0.01" required></label>
       <div class="preview">ระบบจะจัดเศษสตางค์ระบุห้องที่ยังว่างให้อัตโนมัติ และเพิ่มห้องเข้ารอบบิลถัดไป</div>
       <button class="primary" type="submit">เพิ่มห้อง</button>
+    </form>
+  </dialog>
+
+  <dialog id="edit-meter-dialog">
+    <form id="edit-meter-form" class="dialog-form">
+      <button class="dialog-close" type="button" data-close>×</button><p class="eyebrow">EDIT HISTORY</p><h3>แก้มิเตอร์ห้อง <span data-room-number></span></h3>
+      <input name="readingId" type="hidden">
+      <div class="preview">งวด <strong data-billing-period></strong> — ถ้ามีงวดถัดไป ระบบจะปรับเลขครั้งก่อนให้ต่อกันอัตโนมัติ</div>
+      <label>วันที่จด<input name="readAt" type="date" required></label>
+      <div class="meter-pair">
+        <label>น้ำครั้งก่อน<input name="waterPrevious" type="number" min="0" step="0.01" required></label>
+        <label>น้ำครั้งใหม่<input name="waterCurrent" type="number" min="0" step="0.01" required></label>
+      </div>
+      <div class="meter-pair">
+        <label>ไฟครั้งก่อน<input name="electricPrevious" type="number" min="0" step="0.01" required></label>
+        <label>ไฟครั้งใหม่<input name="electricCurrent" type="number" min="0" step="0.01" required></label>
+      </div>
+      <button class="primary" type="submit">บันทึกการแก้ไข</button>
     </form>
   </dialog>
 

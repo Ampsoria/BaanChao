@@ -845,8 +845,10 @@ POST   /api/admin/tenants/move-in    -> ย้ายเข้า (body: roomId, 
 POST   /api/admin/tenants/{id}/move-out -> ย้ายออก (body: moveOutDate, waterFinal, electricFinal, outstanding, deductions[])
 POST   /api/admin/tenants/preview-move-in  -> คำนวณยอดวันส่งมอบห้อง ไม่บันทึก
 POST   /api/admin/tenants/preview-move-out -> คำนวณยอดคืน/เก็บเพิ่ม ไม่บันทึก
-GET    /api/admin/meter-readings/{period}  -> เลขมิเตอร์ของงวดนั้น (ทุกห้อง)
-POST   /api/admin/meter-readings     -> บันทึกเลขมิเตอร์สิ้นเดือน (body: period, readings[])
+GET    /api/admin/meters             -> ประวัติเลขมิเตอร์ (กรองด้วย roomId ได้)
+POST   /api/admin/meters             -> บันทึกเลขมิเตอร์สิ้นเดือน
+POST   /api/admin/meters/history     -> เพิ่มเลขมิเตอร์ตั้งต้น/ย้อนหลัง (ครั้งก่อน + ครั้งใหม่)
+PUT    /api/admin/meters/{id}        -> แก้เลขมิเตอร์ย้อนหลังและปรับฐานงวดถัดไป
 POST   /api/admin/invoices/generate  -> สั่งออกบิลประจำเดือน (เรียก sp_GenerateMonthlyInvoices)
 POST   /api/admin/payments           -> บันทึกการชำระเงินเอง (เงินสด/โอน ไม่ผ่านไลน์)
 GET    /api/admin/invoices/{id}/print -> บิล/ใบเสร็จ PDF สำหรับคนไม่ใช้ไลน์

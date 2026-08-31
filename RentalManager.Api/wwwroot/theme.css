@@ -144,6 +144,48 @@ main {
   font-size: 11px;
 }
 
+.history-guide {
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  background: linear-gradient(120deg, #f1f4df, #fff);
+}
+
+.history-guide h3,
+.history-guide p {
+  margin-bottom: 0;
+}
+
+.history-guide > p {
+  max-width: 650px;
+}
+
+.history-layout {
+  grid-template-columns: minmax(280px, 0.75fr) minmax(520px, 1.65fr);
+  align-items: start;
+}
+
+.meter-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.history-list-panel table {
+  min-width: 720px;
+}
+
+.history-list-panel td {
+  vertical-align: middle;
+}
+
+input[readonly] {
+  background: #efeee8;
+  color: var(--muted);
+}
+
 @media (max-width: 620px) {
   .app-footer {
     padding-top: 28px;
@@ -165,5 +207,21 @@ main {
 
   .inactive-rooms {
     min-width: 0;
+  }
+
+  .history-guide {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .meter-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .history-layout {
+    grid-template-columns: 1fr;
   }
 }
