@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="RentalManager.Api/RentalManager.Api.csproj" />
+  <Project Path="RentalManager.Core/RentalManager.Core.csproj" />
+  <Project Path="RentalManager.Infrastructure/RentalManager.Infrastructure.csproj" />
+  <Project Path="RentalManager.Tests/RentalManager.Tests.csproj" />
+</Solution>

@@ -1,0 +1,150 @@
+@{
+  Layout = null;
+}
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Amp Rental</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/features.css">
+</head>
+<body>
+  <div id="login" class="login-shell hidden">
+    <form id="login-form" class="login-card">
+      <p class="eyebrow">AMP RENTAL</p>
+      <h1>จัดการบ้านเช่า<br>ให้จบในที่เดียว</h1>
+      <label>ชื่อผู้ใช้<input name="username" autocomplete="username" required></label>
+      <label>รหัสผ่าน<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="primary" type="submit">เข้าสู่ระบบ</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </div>
+
+  <div id="app" class="app-shell hidden">
+    <aside>
+      <div class="brand"><span>AR</span><div>Amp Rental<small>6 rooms · Bangkok</small></div></div>
+      <nav>
+        <button class="nav active" data-page="rooms">ภาพรวมห้อง</button>
+        <button class="nav" data-page="meters">จดมิเตอร์</button>
+        <button class="nav" data-page="invoices">บิลและยอดค้าง</button>
+        <button class="nav" data-page="settlements">สรุปย้ายออก</button>
+        <button class="nav" data-page="rates">ตั้งค่าราคา</button>
+        <button class="nav" data-page="audit">ประวัติแก้ไข</button>
+      </nav>
+      <button id="logout" class="quiet">ออกจากระบบ</button>
+    </aside>
+
+    <main>
+      <header><div><p class="eyebrow">ระบบบริหารค่าเช่า</p><h2 id="page-title">ภาพรวมห้อง</h2></div><div id="today" class="date-pill"></div></header>
+      <div id="notice" class="notice hidden"></div>
+
+      <section id="rooms-page" class="page">
+        <div id="summary" class="summary-grid"></div>
+        <div class="section-head"><h3>ห้องพักทั้งหมด</h3><button class="secondary" data-refresh>รีเฟรช</button></div>
+        <div id="rooms-grid" class="rooms-grid loading">กำลังโหลด…</div>
+      </section>
+
+      <section id="meters-page" class="page hidden">
+        <div class="split">
+          <form id="meter-form" class="panel form-grid">
+            <div><p class="eyebrow">MONTHLY READING</p><h3>บันทึกเลขมิเตอร์</h3></div>
+            <label>ห้อง<select name="roomId" id="meter-room" required></select></label>
+            <label>งวดบิล<input name="billingPeriod" type="month" required></label>
+            <label>วันที่จด<input name="readAt" type="date" required></label>
+            <label>เลขมิเตอร์น้ำ<input name="waterCurrent" type="number" min="0" step="0.01" required></label>
+            <label>เลขมิเตอร์ไฟ<input name="electricCurrent" type="number" min="0" step="0.01" required></label>
+            <button class="primary" type="submit">บันทึกมิเตอร์</button>
+          </form>
+          <div class="panel"><div class="section-head"><h3>รายการล่าสุด</h3><button class="secondary" data-refresh>รีเฟรช</button></div><div class="table-wrap"><table><thead><tr><th>ห้อง</th><th>งวด</th><th>น้ำ</th><th>ไฟ</th></tr></thead><tbody id="meter-rows"></tbody></table></div></div>
+        </div>
+      </section>
+
+      <section id="invoices-page" class="page hidden">
+        <div class="toolbar panel"><label>งวดบิล<input id="invoice-period" type="month"></label><button id="generate-invoices" class="primary">ออกบิลประจำเดือน</button><button class="secondary" data-refresh>โหลดรายการ</button></div>
+        <div class="panel table-wrap"><table><thead><tr><th>ห้อง</th><th>ผู้เช่า</th><th>งวด</th><th>ครบกำหนด</th><th>ยอดบิล</th><th>ยอดโอน</th><th>ค้าง</th><th>จัดการ</th></tr></thead><tbody id="invoice-rows"></tbody></table></div>
+      </section>
+
+      <section id="settlements-page" class="page hidden">
+        <div class="panel table-wrap"><table><thead><tr><th>ห้อง</th><th>ผู้เช่า</th><th>วันย้ายออก</th><th>สถานะมัดจำ</th><th>หักรวม</th><th>คืน</th><th>เก็บเพิ่ม</th><th></th></tr></thead><tbody id="settlement-rows"></tbody></table></div>
+      </section>
+
+      <section id="rates-page" class="page hidden">
+        <div class="split">
+          <form id="rate-form" class="panel form-grid">
+            <div><p class="eyebrow">UTILITY RATE</p><h3>เพิ่มอัตราชุดใหม่</h3><p class="muted">ระบบเก็บประวัติ ไม่แก้ทับราคาเดิม</p></div>
+            <label>วันที่มีผล<input name="effectiveFrom" type="date" required></label>
+            <label>ค่าน้ำ / หน่วย<input name="water" type="number" min="0" step="0.01" required></label>
+            <label>ค่าไฟ / หน่วย<input name="electric" type="number" min="0" step="0.01" required></label>
+            <label>ค่าขยะ / เดือน<input name="trash" type="number" min="0" step="0.01" required></label>
+            <label>หมายเหตุ<input name="note" maxlength="200"></label>
+            <div id="rate-preview" class="preview"></div>
+            <button class="primary" type="submit">บันทึกอัตราใหม่</button>
+          </form>
+          <div class="panel"><div class="section-head"><h3>ประวัติอัตรา</h3><button class="secondary" data-refresh>รีเฟรช</button></div><div id="rate-history"></div></div>
+        </div>
+        <div class="panel rent-panel"><div class="section-head"><div><h3>ค่าเช่ารายห้อง</h3><p class="muted">บิลเดิมไม่เปลี่ยน เพราะ snapshot ไว้แล้ว</p></div></div><div id="rent-grid" class="rent-grid"></div></div>
+        <div class="split" style="margin-top:18px">
+          <form id="policy-form" class="panel form-grid">
+            <div><p class="eyebrow">BILLING POLICY</p><h3>วันผ่อนผันและค่าปรับ</h3></div>
+            <label>วันที่มีผล<input name="effectiveFrom" type="date" required></label>
+            <label>ผ่อนผันถึงวันที่<input name="graceDays" type="number" min="1" max="28" required></label>
+            <label>รูปแบบค่าปรับ<select name="lateFeeType"><option value="None">ไม่เก็บค่าปรับ</option><option value="Flat">เหมาจ่าย</option><option value="PerDay">ต่อวัน</option></select></label>
+            <label>ค่าปรับ<input name="lateFeeAmount" type="number" min="0" step="0.01" required></label>
+            <label>เพดานค่าปรับ (ต่อวัน)<input name="lateFeeCap" type="number" min="0" step="0.01"></label>
+            <label>หมายเหตุ<input name="note" maxlength="200"></label>
+            <button class="primary" type="submit">บันทึกนโยบายใหม่</button>
+          </form>
+          <div class="panel"><h3>ประวัตินโยบาย</h3><div id="policy-history"></div></div>
+        </div>
+      </section>
+
+      <section id="audit-page" class="page hidden">
+        <div class="panel table-wrap"><table><thead><tr><th>เวลา</th><th>ผู้แก้</th><th>รายการ</th><th>ค่าเดิม</th><th>ค่าใหม่</th></tr></thead><tbody id="audit-rows"></tbody></table></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="move-in-dialog">
+    <form id="move-in-form" class="dialog-form">
+      <button class="dialog-close" type="button" data-close>×</button><p class="eyebrow">NEW TENANT</p><h3>ย้ายเข้าห้อง <span data-room-number></span></h3>
+      <input name="roomId" type="hidden">
+      <label>ชื่อผู้เช่า<input name="name" required maxlength="200"></label>
+      <label>เบอร์โทร<input name="phone" maxlength="20"></label>
+      <label>วันย้ายเข้า<input name="movedInAt" type="date" required></label>
+      <div class="two"><label>มิเตอร์น้ำตั้งต้น<input name="waterReading" type="number" min="0" step="0.01" required></label><label>มิเตอร์ไฟตั้งต้น<input name="electricReading" type="number" min="0" step="0.01" required></label></div>
+      <div id="move-in-preview" class="preview">เลือกวันเพื่อดูยอด</div>
+      <button class="primary" type="submit">ยืนยันการย้ายเข้า</button>
+    </form>
+  </dialog>
+
+  <dialog id="move-out-dialog">
+    <form id="move-out-form" class="dialog-form">
+      <button class="dialog-close" type="button" data-close>×</button><p class="eyebrow">MOVE OUT</p><h3>ย้ายออกห้อง <span data-room-number></span></h3>
+      <input name="tenantId" type="hidden">
+      <label>วันย้ายออก<input name="moveOutDate" type="date" required></label>
+      <div class="two"><label>มิเตอร์น้ำวันออก<input name="waterFinal" type="number" min="0" step="0.01" required></label><label>มิเตอร์ไฟวันออก<input name="electricFinal" type="number" min="0" step="0.01" required></label></div>
+      <div class="section-head"><p class="muted">ค่าเสียหาย (ถ้ามี)</p><button id="add-damage" class="secondary" type="button">+ เพิ่มรายการ</button></div>
+      <div id="damage-list"></div>
+      <div id="move-out-preview" class="preview">กรอกข้อมูลเพื่อดูยอดคืนหรือเก็บเพิ่ม</div>
+      <button class="danger" type="submit">ยืนยันการย้ายออก</button>
+    </form>
+  </dialog>
+
+  <dialog id="payment-dialog">
+    <form id="payment-form" class="dialog-form">
+      <button class="dialog-close" type="button" data-close>×</button><p class="eyebrow">PAYMENT</p><h3>บันทึกชำระบิล #<span data-invoice-id></span></h3>
+      <input name="invoiceId" type="hidden">
+      <label>ยอดที่รับจริง<input name="paidAmount" type="number" min="0.01" step="0.01" required></label>
+      <label>เวลาชำระ<input name="paidAt" type="datetime-local" required></label>
+      <label>วิธีชำระ<select name="method"><option>PromptPay</option><option>Cash</option><option>BankTransfer</option></select></label>
+      <label>การตรวจสอบ<select name="verificationMode"><option value="Auto">ตรวจสลิปอัตโนมัติ</option><option value="Manual">ยืนยันด้วยผู้ดูแล</option></select></label>
+      <label>รูปสลิป<input name="slip" type="file" accept="image/jpeg,image/png,image/webp"></label>
+      <button class="primary" type="submit">บันทึกการชำระ</button>
+    </form>
+  </dialog>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

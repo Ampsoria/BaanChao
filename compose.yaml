@@ -1,0 +1,39 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    volumes:
+      - sql_data:/var/opt/mssql
+    restart: unless-stopped
+
+  rentalmanager:
+    build: .
+    depends_on:
+      - sqlserver
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      ConnectionStrings__RentalDb: Server=sqlserver;Database=RentalManager;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True
+      Admin__Username: ${ADMIN_USERNAME}
+      Admin__Password: ${ADMIN_PASSWORD}
+      PromptPay__Target: ${PROMPTPAY_TARGET}
+      PublicLinks__SigningKey: ${PUBLIC_LINK_SIGNING_KEY}
+      PublicLinks__BaseUrl: ${PUBLIC_BASE_URL}
+      Line__Enabled: ${LINE_ENABLED:-false}
+      Line__ChannelSecret: ${LINE_CHANNEL_SECRET:-}
+      Line__ChannelAccessToken: ${LINE_CHANNEL_ACCESS_TOKEN:-}
+      Storage__SlipRoot: /var/rental/slips
+      SlipVerification__External__Enabled: ${SLIP_API_ENABLED:-false}
+      SlipVerification__External__Endpoint: ${SLIP_API_ENDPOINT:-}
+      SlipVerification__External__ApiKey: ${SLIP_API_KEY:-}
+    volumes:
+      - slip_data:/var/rental/slips
+    restart: unless-stopped
+
+volumes:
+  sql_data:
+  slip_data:
