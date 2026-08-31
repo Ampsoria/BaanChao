@@ -15,11 +15,24 @@ namespace RentalManager.Infrastructure;
 
 public static class DependencyInjection
 {
+    /// <param name="contentRootPath">
+    /// ใช้เป็นฐานของ Storage:SlipRoot เมื่อค่าที่ตั้งไว้เป็น relative path
+    /// ห้ามพึ่ง current directory เพราะบน IIS ไม่ได้ชี้ไปที่โฟลเดอร์แอปเสมอไป
+    /// </param>
     public static IServiceCollection AddRentalInfrastructure(
-        this IServiceCollection services, string connectionString, IConfiguration configuration)
+        this IServiceCollection services,
+        string connectionString,
+        IConfiguration configuration,
+        string? contentRootPath = null)
     {
+        // ของจริงเป็น SQL Server เสมอ SQLite มีไว้เฉพาะให้ลองเปิดหน้าจอบนเครื่อง dev
+        // ที่ยังไม่มี SQL Server โดยไม่ต้องติดตั้งอะไร (ดู README)
+        var useSqlite = string.Equals(configuration["Database:Provider"], "Sqlite", StringComparison.OrdinalIgnoreCase);
         services.AddDbContext<RentalDbContext>(options =>
-            options.UseSqlServer(connectionString));
+        {
+            if (useSqlite) options.UseSqlite(connectionString);
+            else options.UseSqlServer(connectionString);
+        });
         services.AddScoped<RentalOperationsService>();
         services.Configure<BillingOptions>(options =>
         {
@@ -30,7 +43,7 @@ public static class DependencyInjection
         });
         services.Configure<FileStorageOptions>(options =>
         {
-            options.SlipRoot = configuration["Storage:SlipRoot"] ?? "slips";
+            options.SlipRoot = ResolveSlipRoot(configuration["Storage:SlipRoot"], contentRootPath);
             if (int.TryParse(configuration["Storage:MaxUploadMegabytes"], out var maxUpload))
                 options.MaxUploadMegabytes = maxUpload;
         });
@@ -54,5 +67,17 @@ public static class DependencyInjection
         services.AddHttpClient<ILineMessenger, LineMessenger>(client =>
             client.BaseAddress = new Uri("https://api.line.me/"));
         return services;
+    }
+
+    /// <summary>
+    /// สลิปคือหลักฐานการชำระเงิน หายแล้วหายเลย ตำแหน่งที่เก็บจึงต้องคาดเดาได้แน่นอน
+    /// relative path จะอิงโฟลเดอร์ของแอป ไม่ใช่ current directory ซึ่งบน IIS อาจเป็นที่อื่น
+    /// </summary>
+    public static string ResolveSlipRoot(string? configured, string? contentRootPath)
+    {
+        var value = string.IsNullOrWhiteSpace(configured) ? "slips" : configured.Trim();
+        if (Path.IsPathRooted(value)) return Path.GetFullPath(value);
+        var basePath = string.IsNullOrWhiteSpace(contentRootPath) ? AppContext.BaseDirectory : contentRootPath;
+        return Path.GetFullPath(Path.Combine(basePath, value));
     }
 }

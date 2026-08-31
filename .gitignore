@@ -13,3 +13,8 @@ slips/
 TestResults/
 coverage/
 test-output.log
+
+# ฐานข้อมูล SQLite ของโหมด dev
+*.db
+*.db-shm
+*.db-wal

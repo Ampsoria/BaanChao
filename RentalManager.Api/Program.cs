@@ -28,7 +28,8 @@ var connectionString = builder.Configuration.GetConnectionString("RentalDb");
 if (string.IsNullOrWhiteSpace(connectionString))
     throw new InvalidOperationException("Missing ConnectionStrings:RentalDb. Configure it with User Secrets or an environment variable.");
 
-builder.Services.AddRentalInfrastructure(connectionString, builder.Configuration);
+builder.Services.AddRentalInfrastructure(
+    connectionString, builder.Configuration, builder.Environment.ContentRootPath);
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -111,7 +112,34 @@ if (app.Configuration.GetValue("Database:InitializeOnStartup", false))
 {
     await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<RentalDbContext>();
-    await db.Database.MigrateAsync();
+    // migration ทั้งหมดเขียนเป็น T-SQL จึงใช้ได้เฉพาะ SQL Server
+    // โหมด SQLite สร้าง schema จากโมเดลตรงๆ เพราะมีไว้ดูหน้าจอเท่านั้น ไม่ได้เก็บข้อมูลจริง
+    if (string.Equals(app.Configuration["Database:Provider"], "Sqlite", StringComparison.OrdinalIgnoreCase))
+        await db.Database.EnsureCreatedAsync();
+    else
+        await db.Database.MigrateAsync();
+}
+
+// สลิปคือหลักฐานการชำระเงิน ถ้าเขียนโฟลเดอร์ไม่ได้ต้องรู้ตั้งแต่ตอนสตาร์ต
+// ไม่ใช่ไปรู้ตอนลูกบ้านส่งสลิปมาแล้วหาย — ไม่ crash เพราะบน shared hosting
+// จะทำให้หน้า admin เข้าไม่ได้เลยจนวินิจฉัยอะไรไม่ได้
+{
+    var slipRoot = RentalManager.Infrastructure.DependencyInjection.ResolveSlipRoot(
+        app.Configuration["Storage:SlipRoot"], app.Environment.ContentRootPath);
+    var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    try
+    {
+        Directory.CreateDirectory(slipRoot);
+        var probe = Path.Combine(slipRoot, $".write-test-{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(probe, "ok");
+        File.Delete(probe);
+        startupLogger.LogInformation("Slip storage ready at {SlipRoot}", slipRoot);
+    }
+    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+    {
+        startupLogger.LogError(exception,
+            "เขียนโฟลเดอร์เก็บสลิปไม่ได้: {SlipRoot} — ตรวจสิทธิ์ของ Storage:SlipRoot ก่อนรับสลิปจากลูกบ้าน", slipRoot);
+    }
 }
 
 // เตือนดังๆ ถ้ายังใช้รหัสผ่าน plaintext บนเครื่องจริง

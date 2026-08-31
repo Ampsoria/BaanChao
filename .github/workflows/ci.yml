@@ -1,11 +1,17 @@
 name: CI
 
+# ตรวจทุก branch ที่ push ไม่ใช่เฉพาะ main
+# ของเดิมทำให้ branch ที่ยังไม่เปิด PR ผ่านไปโดยไม่มีใครตรวจเลย
 on:
   push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+
+# push ทับระหว่างที่รอบเก่ายังรันอยู่ ให้ยกเลิกรอบเก่าทิ้ง
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   DOTNET_NOLOGO: true
