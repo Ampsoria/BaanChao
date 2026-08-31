@@ -30,7 +30,7 @@
 
   <div id="app" class="app-shell hidden">
     <aside>
-      <div class="brand"><span>AR</span><div>Amp Rental<small>6 rooms · Bangkok</small></div></div>
+      <div class="brand"><span>AR</span><div>Amp Rental<small>Rental management · Bangkok</small></div></div>
       <nav>
         <button class="nav active" data-page="rooms">ภาพรวมห้อง</button>
         <button class="nav" data-page="meters">จดมิเตอร์</button>
@@ -48,8 +48,12 @@
 
       <section id="rooms-page" class="page">
         <div id="summary" class="summary-grid"></div>
-        <div class="section-head"><h3>ห้องพักทั้งหมด</h3><button class="secondary" data-refresh>รีเฟรช</button></div>
+        <div class="section-head"><h3>ห้องพักที่เปิดใช้งาน</h3><div class="room-actions"><button id="open-add-room" class="primary">+ เพิ่มห้อง</button><button class="secondary" data-refresh>รีเฟรช</button></div></div>
         <div id="rooms-grid" class="rooms-grid loading">กำลังโหลด…</div>
+        <div id="inactive-rooms-panel" class="panel inactive-rooms-panel hidden">
+          <div><p class="eyebrow">ARCHIVED ROOMS</p><h3>ห้องที่ปิดใช้งาน</h3><p class="muted">ประวัติผู้เช่า บิล และมิเตอร์ยังอยู่ครบ สามารถเปิดกลับมาใช้ได้</p></div>
+          <div id="inactive-rooms" class="inactive-rooms"></div>
+        </div>
       </section>
 
       <section id="meters-page" class="page hidden">
@@ -116,6 +120,16 @@
       </footer>
     </main>
   </div>
+
+  <dialog id="add-room-dialog">
+    <form id="add-room-form" class="dialog-form">
+      <button class="dialog-close" type="button" data-close>×</button><p class="eyebrow">NEW ROOM</p><h3>เพิ่มห้องเช่า</h3>
+      <label>เลขห้อง<input name="roomNumber" required maxlength="10" pattern="[A-Za-z0-9ก-๙_-]+" placeholder="เช่น 7 หรือ A1"></label>
+      <label>ค่าเช่าต่อเดือน<input name="monthlyRent" type="number" min="0" step="0.01" required></label>
+      <div class="preview">ระบบจะจัดเศษสตางค์ระบุห้องที่ยังว่างให้อัตโนมัติ และเพิ่มห้องเข้ารอบบิลถัดไป</div>
+      <button class="primary" type="submit">เพิ่มห้อง</button>
+    </form>
+  </dialog>
 
   <dialog id="move-in-dialog">
     <form id="move-in-form" class="dialog-form">

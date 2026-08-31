@@ -12,6 +12,7 @@ public sealed class RecordPaymentRequest
 }
 
 public sealed record LoginRequest(string Username, string Password);
+public sealed record CreateRoomRequest(string RoomNumber, decimal MonthlyRent);
 public sealed record CreateRateRequest(DateOnly EffectiveFrom, decimal Water, decimal Electric, decimal Trash, string? Note);
 public sealed record UpdateRentRequest(decimal MonthlyRent);
 public sealed record CreatePolicyRequest(DateOnly EffectiveFrom, byte GraceDays, string LateFeeType, decimal LateFeeAmount, decimal? LateFeeCap, string? Note);

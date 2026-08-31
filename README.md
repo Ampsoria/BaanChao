@@ -1,6 +1,6 @@
 # Rental Manager
 
-ระบบจัดการค่าเช่าบ้านเช่า 6 ห้องตาม [CLAUDE.md](CLAUDE.md) พัฒนาด้วย ASP.NET Core MVC/Web API, EF Core และ SQL Server โดยฟังก์ชันใน Phase 1–4 มี implementation ครบแล้ว
+ระบบจัดการค่าเช่าบ้านเช่าที่เริ่มต้นด้วย 6 ห้องและเพิ่ม/ปิดใช้งานห้องได้ตาม [CLAUDE.md](CLAUDE.md) พัฒนาด้วย ASP.NET Core MVC/Web API, EF Core และ SQL Server โดยฟังก์ชันใน Phase 1–4 มี implementation ครบแล้ว
 
 โครงสร้างเป็น MVC และแยกความรับผิดชอบดังนี้:
 
@@ -58,7 +58,7 @@ dotnet run --project RentalManager.Api
 การออกบิลอัตโนมัติจะตามเก็บงวดปัจจุบันและงวดก่อนหน้าทุกรอบ ไม่ได้ผูกกับวันที่ 1
 แอปที่ถูกพักตอนไม่มีคนใช้แล้วตื่นมาทีหลังจึงยังออกบิลของเดือนนั้นให้ครบ
 
-เมื่อ `Database:InitializeOnStartup=true` แอปจะใช้ EF migrations สร้าง/อัปเกรด schema, seed ห้อง 1–6, view และ stored procedures ให้อัตโนมัติ หน้า Admin อยู่ที่ URL ราก และ health check อยู่ที่ `/health`
+เมื่อ `Database:InitializeOnStartup=true` แอปจะใช้ EF migrations สร้าง/อัปเกรด schema, seed ห้องเริ่มต้น 1–6, view และ stored procedures ให้อัตโนมัติ ห้องเพิ่มเติมจัดการได้จากหน้า Admin หน้า Admin อยู่ที่ URL ราก และ health check อยู่ที่ `/health`
 
 ถ้าต้องการจัดการ migration เอง:
 
@@ -81,7 +81,7 @@ dotnet run --project RentalManager.Api
 ```
 
 เปิด <http://localhost:5080> แล้วล็อกอินด้วยค่าข้างบน โหมดนี้จะสร้าง schema จากโมเดลด้วย `EnsureCreated`
-ไม่ได้ใช้ migration และ seed ห้อง 1–6 พร้อมอัตราเริ่มต้นให้อัตโนมัติ ลบไฟล์ `.db` ทิ้งเมื่อไหร่ก็เริ่มใหม่ได้
+ไม่ได้ใช้ migration และ seed ห้องเริ่มต้น 1–6 พร้อมอัตราเริ่มต้นให้อัตโนมัติ ลบไฟล์ `.db` ทิ้งเมื่อไหร่ก็เริ่มใหม่ได้
 
 > **โหมดนี้ใช้ดูหน้าจอเท่านั้น ห้ามใช้เก็บข้อมูลจริง**
 > SQLite ไม่มีชนิด `decimal` EF จึงเก็บเป็น TEXT แล้วคำนวณ computed column เป็น floating point

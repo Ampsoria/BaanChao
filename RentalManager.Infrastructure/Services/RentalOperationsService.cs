@@ -25,8 +25,9 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
 
     public async Task<MoveInQuote> PreviewMoveInAsync(int roomId, DateOnly movedInAt, CancellationToken cancellationToken)
     {
-        var room = await db.Rooms.AsNoTracking().SingleOrDefaultAsync(x => x.RoomId == roomId, cancellationToken)
-            ?? throw new RentalOperationException("ไม่พบห้องพัก");
+        var room = await db.Rooms.AsNoTracking().SingleOrDefaultAsync(
+            x => x.RoomId == roomId && x.IsActive, cancellationToken)
+            ?? throw new RentalOperationException("ไม่พบห้องพักที่เปิดใช้งาน");
         return BillingCalculator.CalculateMoveIn(room.MonthlyRent, movedInAt);
     }
 

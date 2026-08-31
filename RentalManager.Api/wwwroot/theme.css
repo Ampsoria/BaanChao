@@ -103,6 +103,47 @@ main {
   font-weight: 500;
 }
 
+.inactive-rooms-panel {
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  background: #efeee8;
+  box-shadow: none;
+}
+
+.inactive-rooms-panel h3,
+.inactive-rooms-panel p {
+  margin-bottom: 3px;
+}
+
+.inactive-rooms {
+  min-width: min(100%, 390px);
+  display: grid;
+  gap: 8px;
+}
+
+.inactive-room {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background: var(--card);
+}
+
+.inactive-room > div {
+  display: grid;
+}
+
+.inactive-room span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 @media (max-width: 620px) {
   .app-footer {
     padding-top: 28px;
@@ -115,5 +156,14 @@ main {
     align-items: flex-start;
     flex-direction: column;
     gap: 2px;
+  }
+
+  .inactive-rooms-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inactive-rooms {
+    min-width: 0;
   }
 }
