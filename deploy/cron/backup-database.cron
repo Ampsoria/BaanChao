@@ -1,0 +1,2 @@
+# Run every night at 02:00 server time. Optionally configure RENTAL_DATABASE_BACKUP_DESTINATION for off-site rclone storage.
+0 2 * * * /opt/rental/scripts/backup-database.sh >> /var/log/rental-database-backup.log 2>&1

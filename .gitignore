@@ -11,6 +11,7 @@ appsettings.Development.json
 .env.*
 !.env.example
 slips/
+backups/
 TestResults/
 coverage/
 test-output.log

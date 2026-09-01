@@ -6,6 +6,18 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      # local .env เดิมใช้ Developer ต่อได้; deployment ใหม่ให้ใช้ Express จาก .env.example
+      MSSQL_PID: ${MSSQL_PID:-Developer}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1 ||
+          /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -Q "SELECT 1" >/dev/null 2>&1
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
     volumes:
       - sql_data:/var/opt/mssql
     restart: unless-stopped
@@ -13,15 +25,17 @@ services:
   rentalmanager:
     build: .
     depends_on:
-      - sqlserver
+      sqlserver:
+        condition: service_healthy
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       ConnectionStrings__RentalDb: Server=sqlserver;Database=RentalManager;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True
       Admin__Username: ${ADMIN_USERNAME}
-      Admin__Password: ${ADMIN_PASSWORD}
+      Admin__PasswordHash: ${ADMIN_PASSWORD_HASH:-}
+      Database__InitializeOnStartup: "true"
       PromptPay__Target: ${PROMPTPAY_TARGET}
       PublicLinks__SigningKey: ${PUBLIC_LINK_SIGNING_KEY}
       PublicLinks__BaseUrl: ${PUBLIC_BASE_URL}

@@ -11,7 +11,11 @@ using RentalManager.Core.Entities;
 using RentalManager.Core.Interfaces;
 using RentalManager.Core.Services;
 using RentalManager.Infrastructure.Data;
+using RentalManager.Infrastructure.Documents;
+using RentalManager.Infrastructure.PromptPay;
 using RentalManager.Infrastructure.Services;
+using RentalManager.Infrastructure.Slip;
+using RentalManager.Infrastructure.Storage;
 using Xunit;
 
 namespace RentalManager.Tests;
@@ -56,6 +60,56 @@ public sealed class InvoiceVoidTests
 
         Assert.IsType<ConflictObjectResult>(result);
         Assert.Equal(InvoiceStatus.Unpaid, invoice.Status);
+    }
+
+    [Fact]
+    public async Task VerifyPayment_RejectsPaymentBelongingToVoidInvoice()
+    {
+        await using var db = CreateDatabase();
+        var invoice = AddInvoice(db);
+        invoice.Status = InvoiceStatus.Void;
+        var payment = new Payment
+        {
+            Invoice = invoice,
+            PaidAmount = 100m,
+            PaidAt = DateTime.UtcNow,
+            Method = "Cash",
+            VerificationStatus = "Pending"
+        };
+        db.Payments.Add(payment);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await CreatePaymentsController(db).VerifyManually(
+            payment.PaymentId, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal("Pending", payment.VerificationStatus);
+        Assert.Equal(InvoiceStatus.Void, invoice.Status);
+        Assert.Empty(await db.AuditLogs.ToListAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task VerifyPayment_IsIdempotentWhenAlreadyVerified()
+    {
+        await using var db = CreateDatabase();
+        var invoice = AddInvoice(db);
+        var payment = new Payment
+        {
+            Invoice = invoice,
+            PaidAmount = 100m,
+            PaidAt = DateTime.UtcNow,
+            Method = "Cash",
+            VerificationStatus = "Verified",
+            VerifiedBy = "test"
+        };
+        db.Payments.Add(payment);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await CreatePaymentsController(db).VerifyManually(
+            payment.PaymentId, TestContext.Current.CancellationToken);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Empty(await db.AuditLogs.ToListAsync(TestContext.Current.CancellationToken));
     }
 
     private static Invoice AddInvoice(RentalDbContext db)
@@ -116,6 +170,22 @@ public sealed class InvoiceVoidTests
             }
         };
         return controller;
+    }
+
+    private static PaymentsController CreatePaymentsController(RentalDbContext db)
+    {
+        var storage = new LocalFileStorage(Options.Create(new FileStorageOptions
+        {
+            SlipRoot = Path.Combine(Path.GetTempPath(), $"rental-void-test-{Guid.NewGuid():N}")
+        }));
+        return new PaymentsController(
+            db,
+            storage,
+            new LocalSlipVerifier(),
+            new ExternalSlipVerifier(new HttpClient(), Options.Create(new ExternalSlipVerifierOptions())),
+            new PromptPayService(),
+            new ReceiptService(),
+            new ConfigurationBuilder().Build());
     }
 
     private sealed class FakeLineMessenger : ILineMessenger

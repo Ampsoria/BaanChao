@@ -31,7 +31,7 @@ public static class DependencyInjection
         services.AddDbContext<RentalDbContext>(options =>
         {
             if (useSqlite) options.UseSqlite(connectionString);
-            else options.UseSqlServer(connectionString);
+            else options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure());
         });
         services.AddScoped<RentalOperationsService>();
         services.Configure<BillingOptions>(options =>

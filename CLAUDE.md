@@ -938,7 +938,7 @@ GET    /api/admin/audit              -> ประวัติการแก้�
 | ทาง | ไฟล์ที่เป็นของทางนั้น |
 |-----|---------------------|
 | A. MonsterASP.NET (IIS) | `DEPLOYMENT.md`, `.github/workflows/deploy.yml`, `keepalive.yml` |
-| B. Docker / Linux | `Dockerfile`, `compose.yaml`, `scripts/backup-slips.sh`, `deploy/cron/` |
+| B. Docker / Linux | `Dockerfile`, `compose.yaml`, `scripts/backup-database.sh`, `scripts/backup-slips.sh`, `deploy/cron/` |
 
 ทาง B ใช้กับ IIS shared hosting ไม่ได้ ไม่มี shell ไม่มี cron และ path เป็นแบบยูนิกซ์
 เก็บไว้เผื่อวันหน้าย้ายไปโฮสต์ที่รัน container ได้

@@ -25,7 +25,7 @@
 - เก็บสลิปนอก `wwwroot`, GUID filename, resize, SHA-256 ป้องกันสลิปซ้ำ
 - ตรวจสลิป local ด้วย ZXing; รายการที่ยืนยันไม่ได้จะเป็น `Pending` ให้ Admin ตรวจ
 - adapter สำหรับ External Slip Verification API ผ่าน `ISlipVerifier`
-- `BackgroundService` ออกบิลวันที่ 1, ค่าปรับตาม policy และเตือนเมื่อเกินกำหนด
+- `BackgroundService` ตามออกบิลงวดที่ถึงกำหนด, ค่าปรับตาม policy และเตือนเมื่อเกินกำหนด
 - ใบเสร็จและใบสรุปย้ายออก PDF
 
 ## เริ่มใช้งานสำหรับพัฒนา
@@ -120,18 +120,20 @@ dotnet run --project RentalManager.Api
 ## นำขึ้นเซิร์ฟเวอร์
 
 ดู [DEPLOYMENT.md](DEPLOYMENT.md) มีสองทางให้เลือก: MonsterASP.NET (IIS shared hosting ตามที่เลือกไว้ใน CLAUDE.md ข้อ 10)
-หรือ Docker/Linux ตามหัวข้อถัดไป — ไฟล์ Docker, `scripts/backup-slips.sh` และ `deploy/cron/` เป็นของทางหลังเท่านั้น
+หรือ Docker/Linux ตามหัวข้อถัดไป — ไฟล์ Docker, สคริปต์ backup และ `deploy/cron/` เป็นของทางหลังเท่านั้น
 
 ## รันด้วย Docker Compose
 
 ```bash
 cp .env.example .env
-# แก้ค่าทุกตัวใน .env โดยเฉพาะรหัสผ่านและ signing key
+# สร้าง hash แล้วนำผลทั้งบรรทัดไปใส่ ADMIN_PASSWORD_HASH ใน .env
+dotnet run --project RentalManager.Api -- hash-password
+# แก้ค่าตัวอย่างทุกตัว โดยใส่ hash ไว้ใน single quotes เพื่อเก็บเครื่องหมาย $ ตามตัวอักษร
 docker compose up --build -d
 curl http://localhost:8080/health
 ```
 
-Production ต้องวางหลัง HTTPS reverse proxy ค่า cookie จะเป็น Secure เสมอเมื่อไม่ใช่ Development และไม่ควรเปิดพอร์ต SQL Server ออกสู่สาธารณะ Compose เปิด forwarded headers ไว้สำหรับ proxy แล้ว จึงต้องใช้ firewall ให้ request ภายนอกผ่าน proxy เท่านั้น
+`.env.example` กำหนด SQL Server Express ซึ่งอนุญาตให้ใช้ production และ Compose รอจนฐานข้อมูล healthy ก่อนเปิดแอป พอร์ตเว็บกับฐานข้อมูล bind ที่ `127.0.0.1` เท่านั้น Production ต้องวางหลัง HTTPS reverse proxy บนเครื่องเดียวกัน ค่า cookie จะเป็น Secure เสมอเมื่อไม่ใช่ Development และ Compose เปิด forwarded headers ไว้สำหรับ proxy แล้ว
 
 ## ตั้งค่า LINE OA
 
@@ -157,11 +159,21 @@ SlipVerification:External:ApiKey=...
 
 adapter ส่ง multipart field ชื่อ `file` พร้อม Bearer token และรองรับ response ที่มี `amount`/`paidAmount`, `transRef`/`reference`/`transactionId`, และ `transferredAt`/`transDate` ที่ root หรือใต้ `data` หาก provider ใช้ contract อื่นให้แก้เฉพาะ `ExternalSlipVerifier` โดยไม่กระทบ flow หลัก
 
-## Backup สลิป
+## Backup ข้อมูล Docker
 
-สลิปและรูปหลักฐานอยู่ใน `/var/rental/slips/YYYY/MM/{guid}.jpg` สำหรับ container และไม่ถูกเสิร์ฟเป็น static file ใช้ [scripts/backup-slips.sh](scripts/backup-slips.sh) ร่วมกับ rclone; ตัวอย่าง cron อยู่ที่ [deploy/cron/backup-slips.cron](deploy/cron/backup-slips.cron)
+ฐานข้อมูลกับสลิปต้องสำรองทั้งคู่:
 
-ควรใช้ปลายทาง backup คนละเครื่อง/ผู้ให้บริการ และทดสอบ restore เป็นระยะ
+```bash
+# สร้าง .bak, ตรวจด้วย RESTORE VERIFYONLY แล้วเก็บไว้ใต้ backups/database (ถูก gitignore)
+bash scripts/backup-database.sh
+
+# สำรองรูปสลิปไปปลายทาง rclone
+RENTAL_BACKUP_DESTINATION=gdrive:rental-backup/slips bash scripts/backup-slips.sh
+```
+
+ถ้าตั้ง `RENTAL_DATABASE_BACKUP_DESTINATION=gdrive:rental-backup/database` สคริปต์ฐานข้อมูลจะส่งไฟล์ `.bak` ไป rclone เพิ่มด้วย ตัวอย่าง cron อยู่ที่ [deploy/cron/backup-database.cron](deploy/cron/backup-database.cron) และ [deploy/cron/backup-slips.cron](deploy/cron/backup-slips.cron)
+
+ควรใช้ปลายทาง backup คนละเครื่อง/ผู้ให้บริการ เก็บหลายรุ่นตามนโยบายของปลายทาง และทดสอบ restore ไฟล์ `.bak` ลงฐานข้อมูลทดสอบเป็นระยะ ห้ามทดสอบทับฐานข้อมูลจริง
 
 ## ตรวจสอบระบบ
 
@@ -190,4 +202,4 @@ RENTAL_TEST_SQLSERVER='Server=localhost,1433;Database=RentalManagerIntegration;U
 - ค่า Admin, SQL Server, PromptPay และ signing key ที่ไม่ใช่ค่าตัวอย่าง
 - LINE OA credentials หากต้องการเปิด Phase 2
 - API key/contract ของผู้ให้บริการ หากต้องการเปิด external slip verification ใน Phase 4
-- cron/rclone backup และการเฝ้าดู `/health`/application logs
+- cron/rclone backup ทั้งฐานข้อมูลและสลิป และการเฝ้าดู `/health`/application logs

@@ -118,12 +118,17 @@ public sealed class PaymentsController(
         var payment = await db.Payments.Include(x => x.Invoice).ThenInclude(x => x.Payments)
             .SingleOrDefaultAsync(x => x.PaymentId == paymentId, ct);
         if (payment is null) return NotFound();
+        if (payment.Invoice.Status == InvoiceStatus.Void)
+            return Conflict(new { message = "ยืนยันการชำระของบิลที่ยกเลิกแล้วไม่ได้" });
+        if (payment.VerificationStatus == "Verified")
+            return Ok(new { message = "รายการนี้ยืนยันการชำระแล้ว", payment.Invoice.Status });
+        var previousStatus = payment.VerificationStatus;
         payment.VerificationStatus = "Verified";
         payment.VerifiedBy = "Manual";
         payment.VerificationNote = null;
         var total = payment.Invoice.Payments.Where(x => x.VerificationStatus == "Verified").Sum(x => x.PaidAmount);
         payment.Invoice.Status = total >= payment.Invoice.TotalAmount ? InvoiceStatus.Paid : InvoiceStatus.Partial;
-        db.AuditLogs.Add(Audit("Payment", paymentId.ToString(CultureInfo.InvariantCulture), "Verify", "Pending", "Verified"));
+        db.AuditLogs.Add(Audit("Payment", paymentId.ToString(CultureInfo.InvariantCulture), "Verify", previousStatus, "Verified"));
         await db.SaveChangesAsync(ct);
         return Ok(new { message = "ยืนยันการชำระเงินแล้ว", payment.Invoice.Status });
     }

@@ -7,9 +7,9 @@
 | ทาง | ใช้เมื่อ | ไฟล์ที่เกี่ยวข้อง |
 |-----|---------|-----------------|
 | **A. MonsterASP.NET (IIS shared hosting)** | ตามที่เลือกไว้ใน CLAUDE.md ข้อ 10 — ค่าใช้จ่าย 0 บาท | เอกสารนี้ + `.github/workflows/deploy.yml` |
-| **B. Docker / Linux** | ถ้าย้ายไปโฮสต์ที่รัน container ได้ | `Dockerfile`, `compose.yaml`, `scripts/backup-slips.sh`, `deploy/cron/` |
+| **B. Docker / Linux** | ถ้าย้ายไปโฮสต์ที่รัน container ได้ | `Dockerfile`, `compose.yaml`, `scripts/backup-database.sh`, `scripts/backup-slips.sh`, `deploy/cron/` |
 
-> ไฟล์ Docker, `scripts/backup-slips.sh` และ crontab ใน `deploy/cron/` เป็นของทาง B ทั้งหมด
+> ไฟล์ Docker, สคริปต์ backup และ crontab ใน `deploy/cron/` เป็นของทาง B ทั้งหมด
 > ใช้กับ IIS shared hosting ไม่ได้ (ไม่มี shell, ไม่มี cron, path เป็นแบบยูนิกซ์)
 
 ---

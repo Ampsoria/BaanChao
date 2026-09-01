@@ -16,6 +16,7 @@ fi
 BASE_URL="${BASE_URL%/}"
 
 ENV_FILE="$(cd "$(dirname "$0")/.." && pwd)/.env"
+PROJECT_DIR="$(dirname "$ENV_FILE")"
 if [ -e "$ENV_FILE" ]; then
   echo "มี .env อยู่แล้วที่ $ENV_FILE — ลบหรือย้ายออกก่อนถ้าต้องการสร้างใหม่" >&2
   exit 1
@@ -33,12 +34,22 @@ SA_PASSWORD="Db$(random_token 20)9x!"
 ADMIN_PASSWORD="Demo$(random_token 14)7k"
 SIGNING_KEY="$(random_token 48)"
 
+# Compose รันแอปใน Production ซึ่งบังคับใช้ PBKDF2 hash ไม่ยอมให้เก็บรหัสผ่านจริงใน environment
+dotnet build "$PROJECT_DIR/RentalManager.Api/RentalManager.Api.csproj" --nologo --verbosity quiet >/dev/null
+ADMIN_PASSWORD_HASH="$(printf '%s\n' "$ADMIN_PASSWORD" \
+  | dotnet run --project "$PROJECT_DIR/RentalManager.Api" --no-build -- hash-password 2>/dev/null)"
+case "$ADMIN_PASSWORD_HASH" in
+  pbkdf2\$*) ;;
+  *) echo "สร้าง password hash ไม่สำเร็จ" >&2; exit 1 ;;
+esac
+
 umask 077
 cat > "$ENV_FILE" <<EOF
 # สร้างโดย scripts/make-demo-env.sh — สำหรับ demo ชั่วคราวเท่านั้น
 MSSQL_SA_PASSWORD=$SA_PASSWORD
+MSSQL_PID=Express
 ADMIN_USERNAME=amp
-ADMIN_PASSWORD=$ADMIN_PASSWORD
+ADMIN_PASSWORD_HASH='$ADMIN_PASSWORD_HASH'
 PROMPTPAY_TARGET=0812345678
 PUBLIC_LINK_SIGNING_KEY=$SIGNING_KEY
 PUBLIC_BASE_URL=$BASE_URL

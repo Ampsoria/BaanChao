@@ -39,8 +39,11 @@ public sealed class InvoicesController(
             x.AdjustmentAmount,
             x.TotalAmount,
             PaidAmount = x.Payments.Where(p => p.VerificationStatus == "Verified").Sum(p => p.PaidAmount),
-            Outstanding = Math.Max(x.TotalAmount - x.Payments.Where(p => p.VerificationStatus == "Verified").Sum(p => p.PaidAmount), 0),
-            TransferAmount = Math.Max(x.TotalAmount - x.Payments.Where(p => p.VerificationStatus == "Verified").Sum(p => p.PaidAmount), 0) > 0
+            Outstanding = x.Status == InvoiceStatus.Void
+                ? 0
+                : Math.Max(x.TotalAmount - x.Payments.Where(p => p.VerificationStatus == "Verified").Sum(p => p.PaidAmount), 0),
+            TransferAmount = x.Status != InvoiceStatus.Void &&
+                             Math.Max(x.TotalAmount - x.Payments.Where(p => p.VerificationStatus == "Verified").Sum(p => p.PaidAmount), 0) > 0
                 ? Math.Max(x.TotalAmount - x.Payments.Where(p => p.VerificationStatus == "Verified").Sum(p => p.PaidAmount), 0) + x.Room.PayeeCents
                 : 0,
             x.Status,
