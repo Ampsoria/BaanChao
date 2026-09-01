@@ -63,6 +63,29 @@ public sealed class InvoiceVoidTests
     }
 
     [Fact]
+    public async Task VoidInvoice_RejectsPendingPaymentUntilItIsResolved()
+    {
+        await using var db = CreateDatabase();
+        var invoice = AddInvoice(db);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.Payments.Add(new Payment
+        {
+            InvoiceId = invoice.InvoiceId,
+            PaidAmount = 100m,
+            PaidAt = DateTime.UtcNow,
+            Method = "PromptPay",
+            VerificationStatus = "Pending"
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await CreateController(db).VoidInvoice(invoice.InvoiceId,
+            new VoidInvoiceRequest("ต้องการยกเลิก"), TestContext.Current.CancellationToken);
+
+        Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(InvoiceStatus.Unpaid, invoice.Status);
+    }
+
+    [Fact]
     public async Task VerifyPayment_RejectsPaymentBelongingToVoidInvoice()
     {
         await using var db = CreateDatabase();
@@ -162,6 +185,70 @@ public sealed class InvoiceVoidTests
 
         Assert.IsType<BadRequestObjectResult>(result);
         Assert.Empty(await db.Payments.ToListAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task RecordPayment_ReservesBalanceForPendingPayments()
+    {
+        await using var db = CreateDatabase();
+        var invoice = AddInvoice(db);
+        SetComputedTotal(invoice, 1_800m);
+        db.Payments.Add(new Payment
+        {
+            Invoice = invoice,
+            PaidAmount = 1_000.01m,
+            PaidAt = DateTime.UtcNow,
+            Method = "PromptPay",
+            VerificationStatus = "Pending"
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await CreatePaymentsController(db).RecordPayment(invoice.InvoiceId,
+            new RecordPaymentRequest
+            {
+                PaidAmount = 800.01m,
+                PaidAt = DateTime.UtcNow,
+                Method = "PromptPay",
+                VerificationMode = "Manual"
+            }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Single(await db.Payments.ToListAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task VerifyPayment_RejectsTotalAboveOutstandingBalance()
+    {
+        await using var db = CreateDatabase();
+        var invoice = AddInvoice(db);
+        SetComputedTotal(invoice, 1_800m);
+        var pending = new Payment
+        {
+            Invoice = invoice,
+            PaidAmount = 100m,
+            PaidAt = DateTime.UtcNow,
+            Method = "Cash",
+            VerificationStatus = "Pending"
+        };
+        db.Payments.AddRange(
+            new Payment
+            {
+                Invoice = invoice,
+                PaidAmount = 1_800.01m,
+                PaidAt = DateTime.UtcNow,
+                Method = "PromptPay",
+                VerificationStatus = "Verified",
+                VerifiedBy = "test"
+            },
+            pending);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await CreatePaymentsController(db).VerifyManually(
+            pending.PaymentId, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal("Pending", pending.VerificationStatus);
+        Assert.Empty(await db.AuditLogs.ToListAsync(TestContext.Current.CancellationToken));
     }
 
     private static Invoice AddInvoice(RentalDbContext db)

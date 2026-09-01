@@ -48,7 +48,7 @@ public sealed class InvoicesController(
                 : 0,
             x.Status,
             CanVoid = x.Status != InvoiceStatus.Void &&
-                      !x.Payments.Any(p => p.VerificationStatus == "Verified"),
+                      !x.Payments.Any(p => p.VerificationStatus == "Verified" || p.VerificationStatus == "Pending"),
             Payments = x.Payments.OrderByDescending(p => p.PaidAt).Select(p => new
             {
                 p.PaymentId,
@@ -82,6 +82,8 @@ public sealed class InvoicesController(
             return Ok(new { message = "บิลนี้ถูกยกเลิกอยู่แล้ว" });
         if (invoice.Payments.Any(x => x.VerificationStatus == "Verified"))
             return Conflict(new { message = "ยกเลิกบิลที่มีการชำระเงินยืนยันแล้วไม่ได้ กรุณาตรวจสอบยอดเงินก่อน" });
+        if (invoice.Payments.Any(x => x.VerificationStatus == "Pending"))
+            return Conflict(new { message = "บิลนี้มีรายการรับเงินที่รอตรวจ กรุณายืนยันหรือยกเลิกรายการรับเงินก่อน" });
         if (await db.MoveOutSettlements.AnyAsync(x => x.TenantId == invoice.TenantId, ct))
             return Conflict(new { message = "ยกเลิกบิลไม่ได้ เพราะยอดถูกนำไปสรุปการย้ายออกแล้ว" });
 

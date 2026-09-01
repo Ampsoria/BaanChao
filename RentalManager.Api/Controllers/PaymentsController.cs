@@ -36,10 +36,13 @@ public sealed class PaymentsController(
         var invoice = await db.Invoices.Include(x => x.Room).Include(x => x.Payments)
             .SingleOrDefaultAsync(x => x.InvoiceId == invoiceId, ct);
         if (invoice is null || invoice.Status == InvoiceStatus.Void) return NotFound();
-        var paidBefore = invoice.Payments.Where(x => x.VerificationStatus == "Verified").Sum(x => x.PaidAmount);
-        var outstandingBefore = Math.Max(invoice.TotalAmount - paidBefore, 0);
+        // Pending ต้องกันวงเงินไว้ด้วย ไม่เช่นนั้นสามารถบันทึกรายการรอตรวจเต็มยอดหลายรายการ
+        // แล้วค่อยยืนยันภายหลังจนยอดรวมเกินบิลได้
+        var reservedBefore = invoice.Payments
+            .Where(x => x.VerificationStatus is "Verified" or "Pending").Sum(x => x.PaidAmount);
+        var outstandingBefore = Math.Max(invoice.TotalAmount - reservedBefore, 0);
         if (outstandingBefore == 0)
-            return Conflict(new { message = "บิลนี้ชำระครบแล้ว" });
+            return Conflict(new { message = "บิลนี้ชำระครบแล้วหรือมียอดรอตรวจครบจำนวน กรุณาตรวจหรือยกเลิกรายการเดิมก่อน" });
         if (request.PaidAmount > outstandingBefore + invoice.Room.PayeeCents)
             return BadRequest(new
             {
@@ -125,7 +128,9 @@ public sealed class PaymentsController(
     [HttpPost("payments/{paymentId:int}/verify")]
     public async Task<IActionResult> VerifyManually(int paymentId, CancellationToken ct)
     {
-        var payment = await db.Payments.Include(x => x.Invoice).ThenInclude(x => x.Payments)
+        var payment = await db.Payments
+            .Include(x => x.Invoice).ThenInclude(x => x.Room)
+            .Include(x => x.Invoice).ThenInclude(x => x.Payments)
             .SingleOrDefaultAsync(x => x.PaymentId == paymentId, ct);
         if (payment is null) return NotFound();
         if (payment.Invoice.Status == InvoiceStatus.Void)
@@ -134,6 +139,11 @@ public sealed class PaymentsController(
             return Conflict(new { message = "รายการรับเงินนี้ถูกยกเลิกแล้ว" });
         if (payment.VerificationStatus == "Verified")
             return Ok(new { message = "รายการนี้ยืนยันการชำระแล้ว", payment.Invoice.Status });
+        var verifiedBefore = payment.Invoice.Payments
+            .Where(x => x.PaymentId != paymentId && x.VerificationStatus == "Verified").Sum(x => x.PaidAmount);
+        var outstandingBefore = Math.Max(payment.Invoice.TotalAmount - verifiedBefore, 0);
+        if (outstandingBefore == 0 || payment.PaidAmount > outstandingBefore + payment.Invoice.Room.PayeeCents)
+            return Conflict(new { message = "ยืนยันรายการนี้ไม่ได้ เพราะจะทำให้ยอดรับรวมสูงกว่ายอดที่ต้องโอน" });
         var previousStatus = payment.VerificationStatus;
         payment.VerificationStatus = "Verified";
         payment.VerifiedBy = "Manual";
