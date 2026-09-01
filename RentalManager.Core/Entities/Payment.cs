@@ -13,6 +13,9 @@ public sealed class Payment
     public string? VerifiedBy { get; set; }
     public string VerificationStatus { get; set; } = "Pending";
     public string? VerificationNote { get; set; }
+    public DateTime? VoidedAt { get; set; }
+    public string? VoidReason { get; set; }
+    public string? VoidedBy { get; set; }
     public DateTime RecordedAt { get; set; }
     public Invoice Invoice { get; set; } = null!;
 }

@@ -57,6 +57,8 @@ public sealed class InvoicesController(
                 p.VerificationStatus,
                 p.VerifiedBy,
                 p.VerificationNote,
+                p.VoidedAt,
+                p.VoidReason,
                 HasSlip = p.SlipImageUrl != null
             })
         }).ToListAsync(ct);

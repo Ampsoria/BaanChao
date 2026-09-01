@@ -38,6 +38,7 @@
         <button class="nav" data-page="invoices">บิลและยอดค้าง</button>
         <button class="nav" data-page="settlements">สรุปย้ายออก</button>
         <button class="nav" data-page="rates">ตั้งค่าราคา</button>
+        <button class="nav" data-page="reports">ส่งออกรายงาน</button>
         <button class="nav" data-page="audit">ประวัติแก้ไข</button>
       </nav>
       <button id="logout" class="quiet">ออกจากระบบ</button>
@@ -142,6 +143,19 @@
 
       <section id="audit-page" class="page hidden">
         <div class="panel table-wrap"><table><thead><tr><th>เวลา</th><th>ผู้แก้</th><th>รายการ</th><th>ค่าเดิม</th><th>ค่าใหม่</th></tr></thead><tbody id="audit-rows"></tbody></table></div>
+      </section>
+
+      <section id="reports-page" class="page hidden">
+        <div class="panel">
+          <div><p class="eyebrow">DATA EXPORT</p><h3>ดาวน์โหลดข้อมูลสำหรับ Excel</h3><p class="muted">ไฟล์เป็น UTF-8 CSV เปิดภาษาไทยได้ และเป็นข้อมูลจากฐานข้อมูล ณ เวลาที่กดดาวน์โหลด</p></div>
+          <div class="room-actions" style="margin-top:18px">
+            <a class="primary" href="/api/admin/reports/invoices.csv">บิลทั้งหมด</a>
+            <a class="secondary" href="/api/admin/reports/payments.csv">รายการรับเงิน</a>
+            <a class="secondary" href="/api/admin/reports/meters.csv">ประวัติมิเตอร์</a>
+            <a class="secondary" href="/api/admin/reports/tenants.csv">ประวัติผู้เช่า</a>
+            <a class="secondary" href="/api/admin/reports/settlements.csv">สรุปย้ายออก</a>
+          </div>
+        </div>
       </section>
 
       <footer class="app-footer">

@@ -20,6 +20,8 @@ public sealed class MoveOutSettlement
     public decimal ForfeitedAmount { get; private set; }
     public DateTime? RefundedAt { get; set; }
     public string? RefundMethod { get; set; }
+    public DateTime? AmountDueCollectedAt { get; set; }
+    public string? AmountDueCollectionMethod { get; set; }
     public string? Note { get; set; }
     public Tenant Tenant { get; set; } = null!;
     public List<SettlementDeduction> Deductions { get; set; } = [];

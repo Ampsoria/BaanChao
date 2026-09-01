@@ -141,6 +141,7 @@ public sealed class InvoiceGenerationTests
             MovedInAt = new DateOnly(2026, 8, 1),
             DepositAmount = 2_000m
         });
+        AddMeter(db, "2026-09");
         await db.SaveChangesAsync(ct);
         var service = NewService(db);
         await service.GenerateMonthlyInvoicesAsync("2026-10", "test", ct);
@@ -211,7 +212,7 @@ public sealed class InvoiceGenerationTests
     }
 
     [Fact]
-    public async Task MissingPreviousReading_StillBillsRentAndSaysSoInsteadOfSkippingSilently()
+    public async Task MissingPreviousReading_SkipsInvoiceUntilUtilitiesAreReady()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var db = await SeededAsync(ct);
@@ -227,13 +228,18 @@ public sealed class InvoiceGenerationTests
 
         var result = await NewService(db).GenerateMonthlyInvoicesAsync("2026-10", "test", ct);
 
-        Assert.Equal(1, result.Value);
+        Assert.Equal(0, result.Value);
         Assert.Contains("2026-09", result.Message);
         Assert.Contains("ห้อง 2", result.Message);
-        var invoice = await db.Invoices.SingleAsync(ct);
-        Assert.Null(invoice.UtilityPeriod);
-        Assert.Equal(0m, invoice.WaterUnits);
-        Assert.Equal(2000m, invoice.RentAmount);
+        Assert.Empty(await db.Invoices.ToListAsync(ct));
+        Assert.Empty(await db.AuditLogs.Where(x => x.FieldName == "GenerateMonthly").ToListAsync(ct));
+
+        AddMeter(db, "2026-09");
+        await db.SaveChangesAsync(ct);
+        var retry = await NewService(db).GenerateMonthlyInvoicesAsync("2026-10", "test", ct);
+
+        Assert.Equal(1, retry.Value);
+        Assert.Single(await db.Invoices.ToListAsync(ct));
     }
 
     [Fact]
@@ -287,6 +293,7 @@ public sealed class InvoiceGenerationTests
             MovedInAt = new DateOnly(2026, 8, 1),
             DepositAmount = 2000m
         });
+        AddMeter(db, "2026-09");
         await db.SaveChangesAsync(ct);
         var service = NewService(db);
 
@@ -296,6 +303,17 @@ public sealed class InvoiceGenerationTests
         Assert.Equal(1, await db.Invoices.CountAsync(ct));
         Assert.Equal(1, await db.AuditLogs.CountAsync(x => x.FieldName == "GenerateMonthly", ct));
     }
+
+    private static void AddMeter(RentalDbContext db, string period) => db.MeterReadings.Add(new MeterReading
+    {
+        RoomId = 2,
+        BillingPeriod = period,
+        ReadAt = new DateOnly(2026, 9, 30),
+        WaterPrev = 100m,
+        WaterCurrent = 105m,
+        ElectricPrev = 500m,
+        ElectricCurrent = 530m
+    });
 
     [Fact]
     public async Task MoveInInvoice_HasNoUtilityPeriodAndUsesConfiguredMinimumStay()

@@ -39,6 +39,33 @@ public sealed class TenantDataManagementTests
     }
 
     [Fact]
+    public async Task ImportExistingTenant_ReusesMatchingSavedBaseline()
+    {
+        await using var db = CreateDatabase();
+        var ct = TestContext.Current.CancellationToken;
+        db.MeterReadings.Add(new MeterReading
+        {
+            RoomId = 1,
+            BillingPeriod = "2026-08",
+            ReadAt = new DateOnly(2026, 8, 31),
+            WaterPrev = 366m,
+            WaterCurrent = 366m,
+            ElectricPrev = 6_387m,
+            ElectricCurrent = 6_387m
+        });
+        await db.SaveChangesAsync(ct);
+
+        var result = await CreateService(db).ImportExistingTenantAsync(new ImportExistingTenantCommand(
+            1, "ผู้เช่าเดิม", null, new DateOnly(2024, 1, 1), 1_800m, null, 5,
+            "2026-08", new DateOnly(2026, 8, 31), 366m, 6_387m), "test", ct);
+
+        Assert.Contains("ใช้เลขมิเตอร์ตั้งต้นที่มีอยู่", result.Message);
+        Assert.Equal(1, await db.MeterReadings.CountAsync(ct));
+        Assert.Equal(1, await db.Tenants.CountAsync(ct));
+        Assert.Empty(await db.Invoices.ToListAsync(ct));
+    }
+
+    [Fact]
     public async Task UpdateTenant_ChangesProfileAndDeposit()
     {
         await using var db = CreateDatabase();

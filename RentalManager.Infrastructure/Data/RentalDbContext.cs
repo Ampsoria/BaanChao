@@ -195,6 +195,8 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         entity.Property(x => x.VerifiedBy).HasMaxLength(20);
         entity.Property(x => x.VerificationStatus).HasMaxLength(20).HasDefaultValue("Pending");
         entity.Property(x => x.VerificationNote).HasMaxLength(500);
+        entity.Property(x => x.VoidReason).HasMaxLength(200);
+        entity.Property(x => x.VoidedBy).HasMaxLength(100);
         entity.Property(x => x.RecordedAt).HasDefaultValueSql(UtcNowSql(sqlite));
         entity.HasIndex(x => x.SlipRef).IsUnique().HasFilter("[SlipRef] IS NOT NULL");
         entity.HasIndex(x => x.SlipHash).IsUnique().HasFilter("[SlipHash] IS NOT NULL");
@@ -244,6 +246,7 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
             $"CASE WHEN [IsForfeited] = 1 AND [DepositAmount] > {deducted} THEN [DepositAmount] - {deducted} ELSE 0 END", stored: true);
         entity.Property(x => x.ForfeitReason).HasMaxLength(200);
         entity.Property(x => x.RefundMethod).HasMaxLength(20);
+        entity.Property(x => x.AmountDueCollectionMethod).HasMaxLength(20);
         entity.Property(x => x.Note).HasMaxLength(500);
         entity.HasOne(x => x.Tenant).WithOne().HasForeignKey<MoveOutSettlement>(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
 

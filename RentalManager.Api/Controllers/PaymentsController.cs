@@ -33,8 +33,18 @@ public sealed class PaymentsController(
             return BadRequest(new { message = "verificationMode ต้องเป็น Auto หรือ Manual" });
         if (request.PaidAt == default)
             return BadRequest(new { message = "กรุณาระบุเวลาชำระ" });
-        var invoice = await db.Invoices.Include(x => x.Payments).SingleOrDefaultAsync(x => x.InvoiceId == invoiceId, ct);
+        var invoice = await db.Invoices.Include(x => x.Room).Include(x => x.Payments)
+            .SingleOrDefaultAsync(x => x.InvoiceId == invoiceId, ct);
         if (invoice is null || invoice.Status == InvoiceStatus.Void) return NotFound();
+        var paidBefore = invoice.Payments.Where(x => x.VerificationStatus == "Verified").Sum(x => x.PaidAmount);
+        var outstandingBefore = Math.Max(invoice.TotalAmount - paidBefore, 0);
+        if (outstandingBefore == 0)
+            return Conflict(new { message = "บิลนี้ชำระครบแล้ว" });
+        if (request.PaidAmount > outstandingBefore + invoice.Room.PayeeCents)
+            return BadRequest(new
+            {
+                message = $"ยอดรับสูงกว่ายอดที่ต้องโอน สูงสุด {outstandingBefore + invoice.Room.PayeeCents:N2} บาท"
+            });
 
         StoredFile? stored = null;
         SlipVerificationResult? verification = null;
@@ -120,6 +130,8 @@ public sealed class PaymentsController(
         if (payment is null) return NotFound();
         if (payment.Invoice.Status == InvoiceStatus.Void)
             return Conflict(new { message = "ยืนยันการชำระของบิลที่ยกเลิกแล้วไม่ได้" });
+        if (payment.VerificationStatus == "Void")
+            return Conflict(new { message = "รายการรับเงินนี้ถูกยกเลิกแล้ว" });
         if (payment.VerificationStatus == "Verified")
             return Ok(new { message = "รายการนี้ยืนยันการชำระแล้ว", payment.Invoice.Status });
         var previousStatus = payment.VerificationStatus;
@@ -131,6 +143,37 @@ public sealed class PaymentsController(
         db.AuditLogs.Add(Audit("Payment", paymentId.ToString(CultureInfo.InvariantCulture), "Verify", previousStatus, "Verified"));
         await db.SaveChangesAsync(ct);
         return Ok(new { message = "ยืนยันการชำระเงินแล้ว", payment.Invoice.Status });
+    }
+
+    [HttpPost("payments/{paymentId:int}/void")]
+    public async Task<IActionResult> VoidPayment(int paymentId, VoidPaymentRequest request, CancellationToken ct)
+    {
+        var reason = request.Reason?.Trim() ?? "";
+        if (reason.Length is < 3 or > 200)
+            return BadRequest(new { message = "กรุณาระบุเหตุผล 3–200 ตัวอักษร" });
+        var payment = await db.Payments.Include(x => x.Invoice).ThenInclude(x => x.Payments)
+            .SingleOrDefaultAsync(x => x.PaymentId == paymentId, ct);
+        if (payment is null) return NotFound();
+        if (payment.VerificationStatus == "Void")
+            return Ok(new { message = "รายการรับเงินนี้ถูกยกเลิกอยู่แล้ว", payment.Invoice.Status });
+
+        var previousStatus = payment.VerificationStatus;
+        payment.VerificationStatus = "Void";
+        payment.VoidedAt = DateTime.UtcNow;
+        payment.VoidReason = reason;
+        payment.VoidedBy = UserName;
+        if (payment.Invoice.Status != InvoiceStatus.Void)
+        {
+            var verifiedTotal = payment.Invoice.Payments
+                .Where(x => x.VerificationStatus == "Verified").Sum(x => x.PaidAmount);
+            payment.Invoice.Status = verifiedTotal >= payment.Invoice.TotalAmount
+                ? InvoiceStatus.Paid
+                : verifiedTotal > 0 ? InvoiceStatus.Partial : InvoiceStatus.Unpaid;
+        }
+        db.AuditLogs.Add(Audit("Payment", paymentId.ToString(CultureInfo.InvariantCulture), "Void",
+            previousStatus, reason.Length <= 100 ? reason : reason[..100]));
+        await db.SaveChangesAsync(ct);
+        return Ok(new { message = "ยกเลิกรายการรับเงินแล้ว ยอดค้างของบิลถูกคำนวณใหม่", payment.Invoice.Status });
     }
 
     [HttpGet("{invoiceId:int}/promptpay-qr")]

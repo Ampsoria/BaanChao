@@ -31,6 +31,7 @@ public sealed record UpdateTenantRequest(
     string Name, string? Phone, DateOnly MovedInAt,
     decimal DepositAmount, DateOnly? DepositReceivedAt, byte MinimumStayMonths);
 public sealed record VoidInvoiceRequest(string Reason);
+public sealed record VoidPaymentRequest(string Reason);
 public sealed record MoveOutRequest(DateOnly MoveOutDate, decimal WaterFinal, decimal ElectricFinal, IReadOnlyCollection<SettlementDeductionQuote>? Deductions);
 public sealed record PreviewInvoiceRequest(
     int RoomId, string BillingPeriod, DateOnly? MovedInAt,

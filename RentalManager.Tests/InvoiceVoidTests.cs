@@ -112,6 +112,58 @@ public sealed class InvoiceVoidTests
         Assert.Empty(await db.AuditLogs.ToListAsync(TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task VoidPayment_PreservesRecordAndReopensInvoice()
+    {
+        await using var db = CreateDatabase();
+        var invoice = AddInvoice(db);
+        SetComputedTotal(invoice, 1_800m);
+        invoice.Status = InvoiceStatus.Paid;
+        var payment = new Payment
+        {
+            Invoice = invoice,
+            PaidAmount = 1_800m,
+            PaidAt = DateTime.UtcNow,
+            Method = "Cash",
+            VerificationStatus = "Verified",
+            VerifiedBy = "test"
+        };
+        db.Payments.Add(payment);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await CreatePaymentsController(db).VoidPayment(payment.PaymentId,
+            new VoidPaymentRequest("บันทึกยอดผิด"), TestContext.Current.CancellationToken);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal("Void", payment.VerificationStatus);
+        Assert.Equal("บันทึกยอดผิด", payment.VoidReason);
+        Assert.NotNull(payment.VoidedAt);
+        Assert.Equal(InvoiceStatus.Unpaid, invoice.Status);
+        Assert.Contains(await db.AuditLogs.ToListAsync(TestContext.Current.CancellationToken),
+            x => x.EntityName == "Payment" && x.FieldName == "Void");
+    }
+
+    [Fact]
+    public async Task RecordPayment_RejectsAmountAboveOutstandingAndPayeeCents()
+    {
+        await using var db = CreateDatabase();
+        var invoice = AddInvoice(db);
+        SetComputedTotal(invoice, 1_800m);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await CreatePaymentsController(db).RecordPayment(invoice.InvoiceId,
+            new RecordPaymentRequest
+            {
+                PaidAmount = 1_800.02m,
+                PaidAt = DateTime.UtcNow,
+                Method = "PromptPay",
+                VerificationMode = "Manual"
+            }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(await db.Payments.ToListAsync(TestContext.Current.CancellationToken));
+    }
+
     private static Invoice AddInvoice(RentalDbContext db)
     {
         var tenant = new Tenant
@@ -178,7 +230,7 @@ public sealed class InvoiceVoidTests
         {
             SlipRoot = Path.Combine(Path.GetTempPath(), $"rental-void-test-{Guid.NewGuid():N}")
         }));
-        return new PaymentsController(
+        var controller = new PaymentsController(
             db,
             storage,
             new LocalSlipVerifier(),
@@ -186,7 +238,19 @@ public sealed class InvoiceVoidTests
             new PromptPayService(),
             new ReceiptService(),
             new ConfigurationBuilder().Build());
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.Name, "PaymentTest")], "Test"))
+            }
+        };
+        return controller;
     }
+
+    private static void SetComputedTotal(Invoice invoice, decimal total) =>
+        typeof(Invoice).GetProperty(nameof(Invoice.TotalAmount))!.SetValue(invoice, total);
 
     private sealed class FakeLineMessenger : ILineMessenger
     {

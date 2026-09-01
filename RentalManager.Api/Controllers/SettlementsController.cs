@@ -21,7 +21,8 @@ public sealed class SettlementsController(
             x.TotalDeducted,
             x.RefundAmount,
             x.AmountDueFromTenant,
-            x.RefundedAt
+            x.RefundedAt,
+            x.AmountDueCollectedAt
         }).ToListAsync(ct));
 
     [HttpGet("{id:int}")]
@@ -48,6 +49,8 @@ public sealed class SettlementsController(
                 x.AmountDueFromTenant,
                 x.ForfeitedAmount,
                 x.RefundedAt,
+                x.AmountDueCollectedAt,
+                x.AmountDueCollectionMethod,
                 x.Deductions
             }).SingleOrDefaultAsync(ct);
         return settlement is null ? NotFound() : Ok(settlement);
@@ -97,6 +100,25 @@ public sealed class SettlementsController(
             $"{settlement.RefundAmount:0.00}/{request.Method}"));
         await db.SaveChangesAsync(ct);
         return Ok(new { message = "บันทึกคืนมัดจำแล้ว" });
+    }
+
+    [HttpPost("{id:int}/mark-amount-due-collected")]
+    public async Task<IActionResult> MarkAmountDueCollected(int id, [FromBody] RefundRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Method) || request.Method.Length > 20)
+            return BadRequest(new { message = "วิธีรับเงินต้องมีความยาวไม่เกิน 20 ตัวอักษร" });
+        var settlement = await db.MoveOutSettlements.SingleOrDefaultAsync(x => x.SettlementId == id, ct);
+        if (settlement is null) return NotFound();
+        if (settlement.AmountDueFromTenant <= 0)
+            return BadRequest(new { message = "รายการนี้ไม่มียอดเก็บเพิ่ม" });
+        if (settlement.AmountDueCollectedAt is not null)
+            return Conflict(new { message = "บันทึกเก็บยอดเพิ่มแล้ว" });
+        settlement.AmountDueCollectedAt = DateTime.UtcNow;
+        settlement.AmountDueCollectionMethod = request.Method.Trim();
+        db.AuditLogs.Add(Audit("MoveOutSettlement", id.ToString(), "AmountDueCollected", null,
+            $"{settlement.AmountDueFromTenant:0.00}/{settlement.AmountDueCollectionMethod}"));
+        await db.SaveChangesAsync(ct);
+        return Ok(new { message = "บันทึกว่าเก็บยอดเพิ่มแล้ว" });
     }
 }
 
