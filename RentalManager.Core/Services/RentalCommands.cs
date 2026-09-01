@@ -9,6 +9,19 @@ public sealed record MoveInCommand(
     decimal ElectricReading,
     string PreferredChannel = "Paper");
 
+public sealed record ImportExistingTenantCommand(
+    int RoomId,
+    string Name,
+    string? Phone,
+    DateOnly MovedInAt,
+    decimal DepositAmount,
+    DateOnly? DepositReceivedAt,
+    byte MinimumStayMonths,
+    string MeterBillingPeriod,
+    DateOnly MeterReadAt,
+    decimal WaterReading,
+    decimal ElectricReading);
+
 public sealed record MoveOutCommand(
     int TenantId,
     DateOnly MoveOutDate,

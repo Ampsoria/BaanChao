@@ -182,6 +182,41 @@ public sealed class SqlServerIntegrationTests
     }
 
     [Fact]
+    public async Task VoidedInvoice_AllowsAReplacementForTheSameTenantAndPeriod()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = await OpenAsync(ct);
+        if (db is null) return;
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        var tenant = new Tenant
+        {
+            RoomId = 3,
+            FullName = "ออกบิลใหม่",
+            MovedInAt = new DateOnly(2026, 8, 1),
+            DepositAmount = 2_200m,
+            MinimumStayMonths = 5
+        };
+        db.Tenants.Add(tenant);
+        await db.SaveChangesAsync(ct);
+        await db.Database.ExecuteSqlRawAsync(
+            "EXEC dbo.sp_GenerateMonthlyInvoices @BillingPeriod = {0}", ["2026-10"], ct);
+        var original = await db.Invoices.SingleAsync(x => x.TenantId == tenant.TenantId, ct);
+        original.Status = InvoiceStatus.Void;
+        await db.SaveChangesAsync(ct);
+
+        await db.Database.ExecuteSqlRawAsync(
+            "EXEC dbo.sp_GenerateMonthlyInvoices @BillingPeriod = {0}", ["2026-10"], ct);
+
+        var invoices = await db.Invoices.Where(x => x.TenantId == tenant.TenantId)
+            .OrderBy(x => x.InvoiceId).ToListAsync(ct);
+        Assert.Equal(2, invoices.Count);
+        Assert.Equal(InvoiceStatus.Void, invoices[0].Status);
+        Assert.Equal(InvoiceStatus.Unpaid, invoices[1].Status);
+        await transaction.RollbackAsync(ct);
+    }
+
+    [Fact]
     public async Task Invoice_RejectsUtilityPeriodThatIsNotTheMonthBeforeBillingPeriod()
     {
         var ct = TestContext.Current.CancellationToken;

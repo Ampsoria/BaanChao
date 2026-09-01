@@ -176,7 +176,8 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
             stored: true);
         entity.Property(x => x.AdjustmentNote).HasMaxLength(200);
         entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
-        entity.HasIndex(x => new { x.RoomId, x.BillingPeriod, x.TenantId }).IsUnique();
+        entity.HasIndex(x => new { x.RoomId, x.BillingPeriod, x.TenantId }).IsUnique()
+            .HasFilter("[Status] <> 'Void'");
         entity.HasOne(x => x.Room).WithMany().HasForeignKey(x => x.RoomId).OnDelete(DeleteBehavior.Restrict);
         entity.HasOne(x => x.Tenant).WithMany(x => x.Invoices).HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
     }

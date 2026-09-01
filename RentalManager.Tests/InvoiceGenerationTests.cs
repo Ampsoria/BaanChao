@@ -129,6 +129,33 @@ public sealed class InvoiceGenerationTests
     }
 
     [Fact]
+    public async Task RegeneratingAfterVoid_CreatesAReplacementInvoice()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = await SeededAsync(ct);
+        db.Tenants.Add(new Tenant
+        {
+            TenantId = 1,
+            RoomId = 2,
+            FullName = "ผู้เช่า",
+            MovedInAt = new DateOnly(2026, 8, 1),
+            DepositAmount = 2_000m
+        });
+        await db.SaveChangesAsync(ct);
+        var service = NewService(db);
+        await service.GenerateMonthlyInvoicesAsync("2026-10", "test", ct);
+        var original = await db.Invoices.SingleAsync(ct);
+        original.Status = InvoiceStatus.Void;
+        await db.SaveChangesAsync(ct);
+
+        var result = await service.GenerateMonthlyInvoicesAsync("2026-10", "test", ct);
+
+        Assert.Equal(1, result.Value);
+        Assert.Equal(2, await db.Invoices.CountAsync(ct));
+        Assert.Single(await db.Invoices.Where(x => x.Status == InvoiceStatus.Unpaid).ToListAsync(ct));
+    }
+
+    [Fact]
     public async Task RoomThatChangedTenantMidMonth_GetsTwoInvoicesAndNoInheritedUtilities()
     {
         var ct = TestContext.Current.CancellationToken;

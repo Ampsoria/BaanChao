@@ -102,6 +102,70 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
         return new OperationResult<int>(tenant.TenantId, $"ย้ายเข้าห้อง {room.RoomNumber} สำเร็จ ยอดวันส่งมอบ {quote.TotalDue:N2} บาท");
     }
 
+    public async Task<OperationResult<int>> ImportExistingTenantAsync(
+        ImportExistingTenantCommand command, string changedBy, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(command.Name))
+            throw new RentalOperationException("กรุณาระบุชื่อผู้เช่า");
+        if (command.Name.Trim().Length > 200 || command.Phone?.Trim().Length > 20)
+            throw new RentalOperationException("ชื่อต้องยาวไม่เกิน 200 และเบอร์โทรไม่เกิน 20 ตัวอักษร");
+        if (command.DepositAmount < 0 || command.WaterReading < 0 || command.ElectricReading < 0)
+            throw new RentalOperationException("มัดจำและเลขมิเตอร์ต้องไม่ติดลบ");
+        if (command.MinimumStayMonths > 120)
+            throw new RentalOperationException("ระยะพักขั้นต่ำต้องไม่เกิน 120 เดือน");
+        EnsureBillingPeriod(command.MeterBillingPeriod);
+        var meterPeriod = ParseBillingPeriod(command.MeterBillingPeriod);
+        if (command.MeterReadAt.Year != meterPeriod.Year || command.MeterReadAt.Month != meterPeriod.Month)
+            throw new RentalOperationException("วันที่จดมิเตอร์ต้องอยู่ในเดือนเดียวกับงวดมิเตอร์");
+        if (command.MovedInAt > command.MeterReadAt)
+            throw new RentalOperationException("วันเข้าอยู่ต้องไม่หลังวันที่จดมิเตอร์ตั้งต้น");
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+        if (command.MovedInAt > today || command.MeterReadAt > today)
+            throw new RentalOperationException("ข้อมูลตั้งต้นต้องไม่เป็นวันที่ในอนาคต");
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var room = await db.Rooms.SingleOrDefaultAsync(x => x.RoomId == command.RoomId && x.IsActive, cancellationToken)
+            ?? throw new RentalOperationException("ไม่พบห้องพักที่เปิดใช้งาน");
+        if (await db.Tenants.AnyAsync(x => x.RoomId == command.RoomId && x.MovedOutAt == null, cancellationToken))
+            throw new RentalOperationException($"ห้อง {room.RoomNumber} มีผู้เช่าอยู่แล้ว");
+        if (await db.MeterReadings.AnyAsync(
+                x => x.RoomId == command.RoomId && x.BillingPeriod == command.MeterBillingPeriod, cancellationToken))
+            throw new RentalOperationException(
+                $"ห้อง {room.RoomNumber} มีข้อมูลมิเตอร์งวด {command.MeterBillingPeriod} แล้ว กรุณาแก้หรือลบรายการเดิมก่อนนำเข้า");
+
+        var tenant = new Tenant
+        {
+            RoomId = command.RoomId,
+            FullName = command.Name.Trim(),
+            Phone = string.IsNullOrWhiteSpace(command.Phone) ? null : command.Phone.Trim(),
+            MovedInAt = command.MovedInAt,
+            DepositAmount = command.DepositAmount,
+            DepositReceivedAt = command.DepositAmount > 0
+                ? command.DepositReceivedAt ?? command.MovedInAt
+                : command.DepositReceivedAt,
+            MinimumStayMonths = command.MinimumStayMonths,
+            PreferredChannel = TenantChannels.Paper
+        };
+        db.Tenants.Add(tenant);
+        await db.SaveChangesAsync(cancellationToken);
+        db.MeterReadings.Add(new MeterReading
+        {
+            RoomId = command.RoomId,
+            BillingPeriod = command.MeterBillingPeriod,
+            ReadAt = command.MeterReadAt,
+            WaterPrev = command.WaterReading,
+            WaterCurrent = command.WaterReading,
+            ElectricPrev = command.ElectricReading,
+            ElectricCurrent = command.ElectricReading
+        });
+        AddAudit("Tenant", tenant.TenantId.ToString(CultureInfo.InvariantCulture), "ImportExisting", null,
+            $"Room {room.RoomNumber}, Baseline {command.MeterBillingPeriod}", changedBy);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new OperationResult<int>(tenant.TenantId,
+            $"นำเข้าผู้เช่าเดิมห้อง {room.RoomNumber} แล้ว โดยไม่สร้างบิลย้อนหลัง");
+    }
+
     public async Task<OperationResult<int>> AddMeterReadingAsync(MeterReadingCommand command, string changedBy, CancellationToken cancellationToken)
     {
         EnsureBillingPeriod(command.BillingPeriod);
@@ -163,7 +227,8 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
         var tenants = await db.Tenants.Include(x => x.Room)
             .Where(x => x.Room.IsActive && x.MovedInAt <= periodEnd && (x.MovedOutAt == null || x.MovedOutAt >= periodStart))
             .ToListAsync(cancellationToken);
-        var existing = await db.Invoices.AsNoTracking().Where(x => x.BillingPeriod == billingPeriod)
+        var existing = await db.Invoices.AsNoTracking()
+            .Where(x => x.BillingPeriod == billingPeriod && x.Status != InvoiceStatus.Void)
             .Select(x => new { x.RoomId, x.TenantId }).ToListAsync(cancellationToken);
         var existingKeys = existing.Select(x => (x.RoomId, x.TenantId)).ToHashSet();
 

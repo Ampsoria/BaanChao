@@ -44,6 +44,8 @@ public sealed class InvoicesController(
                 ? Math.Max(x.TotalAmount - x.Payments.Where(p => p.VerificationStatus == "Verified").Sum(p => p.PaidAmount), 0) + x.Room.PayeeCents
                 : 0,
             x.Status,
+            CanVoid = x.Status != InvoiceStatus.Void &&
+                      !x.Payments.Any(p => p.VerificationStatus == "Verified"),
             Payments = x.Payments.OrderByDescending(p => p.PaidAt).Select(p => new
             {
                 p.PaymentId,
@@ -61,6 +63,36 @@ public sealed class InvoicesController(
     [HttpPost("generate")]
     public async Task<IActionResult> GenerateInvoices(GenerateInvoicesRequest request, CancellationToken ct) =>
         Ok(await service.GenerateMonthlyInvoicesAsync(request.BillingPeriod, UserName, ct));
+
+    [HttpPost("{invoiceId:int}/void")]
+    public async Task<IActionResult> VoidInvoice(int invoiceId, VoidInvoiceRequest request, CancellationToken ct)
+    {
+        var reason = request.Reason?.Trim() ?? "";
+        if (reason.Length is < 3 or > 200)
+            return BadRequest(new { message = "กรุณาระบุเหตุผล 3–200 ตัวอักษร" });
+        var invoice = await db.Invoices.Include(x => x.Payments)
+            .SingleOrDefaultAsync(x => x.InvoiceId == invoiceId, ct);
+        if (invoice is null) return NotFound();
+        if (invoice.Status == InvoiceStatus.Void)
+            return Ok(new { message = "บิลนี้ถูกยกเลิกอยู่แล้ว" });
+        if (invoice.Payments.Any(x => x.VerificationStatus == "Verified"))
+            return Conflict(new { message = "ยกเลิกบิลที่มีการชำระเงินยืนยันแล้วไม่ได้ กรุณาตรวจสอบยอดเงินก่อน" });
+        if (await db.MoveOutSettlements.AnyAsync(x => x.TenantId == invoice.TenantId, ct))
+            return Conflict(new { message = "ยกเลิกบิลไม่ได้ เพราะยอดถูกนำไปสรุปการย้ายออกแล้ว" });
+
+        var wasSent = await db.NotificationLogs.AnyAsync(
+            x => x.InvoiceId == invoiceId && x.NotificationType == "Invoice", ct);
+        invoice.Status = InvoiceStatus.Void;
+        db.AuditLogs.Add(Audit("Invoice", invoiceId.ToString(), "Void",
+            $"{invoice.BillingPeriod}|{invoice.TotalAmount:N2}", reason.Length <= 100 ? reason : reason[..100]));
+        await db.SaveChangesAsync(ct);
+        return Ok(new
+        {
+            message = wasSent
+                ? "ยกเลิกบิลแล้ว บิลนี้เคยส่งให้ผู้เช่า กรุณาแจ้งผู้เช่าด้วย"
+                : "ยกเลิกบิลแล้ว สามารถแก้ข้อมูลและออกบิลงวดเดิมใหม่ได้"
+        });
+    }
 
     /// <summary>บิล PDF สำหรับผู้เช่าที่รับบิลเป็นกระดาษ — ระบบต้องใช้งานได้ครบโดยไม่มี LINE</summary>
     [HttpGet("{invoiceId:int}/print")]
@@ -95,7 +127,7 @@ public sealed class InvoicesController(
     {
         if (await db.NotificationLogs.AnyAsync(x => x.InvoiceId == invoiceId && x.NotificationType == "Invoice", ct))
             return Conflict(new { message = "บิลนี้ส่งทาง LINE แล้ว" });
-        var invoice = await db.Invoices.AsNoTracking().Where(x => x.InvoiceId == invoiceId).Select(x => new
+        var invoice = await db.Invoices.AsNoTracking().Where(x => x.InvoiceId == invoiceId && x.Status != InvoiceStatus.Void).Select(x => new
         {
             x.InvoiceId,
             x.BillingPeriod,

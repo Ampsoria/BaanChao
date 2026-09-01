@@ -205,6 +205,22 @@ input[readonly] {
   color: var(--muted);
 }
 
+.dialog-section {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 2px;
+}
+
+.void-row {
+  color: var(--muted);
+  background: #f3f1ec;
+}
+
+.void-row td {
+  opacity: 0.78;
+}
+
 @media (max-width: 980px) {
   aside {
     position: sticky;

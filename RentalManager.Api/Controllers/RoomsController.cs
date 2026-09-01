@@ -115,6 +115,7 @@ public sealed class RoomsController(RentalDbContext db) : AdminControllerBase
                 x.LineUserId,
                 x.MovedInAt,
                 x.DepositAmount,
+                x.DepositReceivedAt,
                 x.MinimumStayMonths,
                 x.PreferredChannel
             }).FirstOrDefault(),

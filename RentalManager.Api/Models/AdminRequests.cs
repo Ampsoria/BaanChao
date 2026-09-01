@@ -27,6 +27,10 @@ public sealed record UpdateMeterRequest(
     decimal ElectricPrevious, decimal ElectricCurrent);
 public sealed record MoveInPreviewRequest(int RoomId, DateOnly MovedInAt);
 public sealed record UpdateChannelRequest(string PreferredChannel);
+public sealed record UpdateTenantRequest(
+    string Name, string? Phone, DateOnly MovedInAt,
+    decimal DepositAmount, DateOnly? DepositReceivedAt, byte MinimumStayMonths);
+public sealed record VoidInvoiceRequest(string Reason);
 public sealed record MoveOutRequest(DateOnly MoveOutDate, decimal WaterFinal, decimal ElectricFinal, IReadOnlyCollection<SettlementDeductionQuote>? Deductions);
 public sealed record PreviewInvoiceRequest(
     int RoomId, string BillingPeriod, DateOnly? MovedInAt,

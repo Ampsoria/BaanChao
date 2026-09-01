@@ -849,6 +849,9 @@ GET    /api/admin/meters             -> ประวัติเลขมิเ�
 POST   /api/admin/meters             -> บันทึกเลขมิเตอร์สิ้นเดือน
 POST   /api/admin/meters/history     -> เพิ่มเลขมิเตอร์ตั้งต้น/ย้อนหลัง (ครั้งก่อน + ครั้งใหม่)
 PUT    /api/admin/meters/{id}        -> แก้เลขมิเตอร์ย้อนหลังและปรับฐานงวดถัดไป
+POST   /api/admin/tenants/import-existing -> นำเข้าผู้เช่าเดิม + มิเตอร์ตั้งต้น โดยไม่สร้างบิลย้อนหลัง
+PATCH  /api/admin/tenants/{id}       -> แก้ชื่อ เบอร์ วันเข้าอยู่ มัดจำ และเงื่อนไขพักขั้นต่ำ
+POST   /api/admin/invoices/{id}/void -> ยกเลิกบิลที่ยังไม่มีการชำระยืนยัน เพื่อแก้แล้วออกใหม่
 POST   /api/admin/invoices/generate  -> สั่งออกบิลประจำเดือน (เรียก sp_GenerateMonthlyInvoices)
 POST   /api/admin/payments           -> บันทึกการชำระเงินเอง (เงินสด/โอน ไม่ผ่านไลน์)
 GET    /api/admin/invoices/{id}/print -> บิล/ใบเสร็จ PDF สำหรับคนไม่ใช้ไลน์
@@ -1123,7 +1126,7 @@ configurationBuilder.Properties<decimal>().HavePrecision(12, 2);
 
 > โค้ดครบทุก Phase แล้ว สิ่งที่เหลือเป็นงานนอกโค้ดที่ Amp ต้องทำเอง:
 > สร้าง LINE OA channel จริง, เลือก hosting + HTTPS, สมัคร Slip Verification API (ถ้าจะใช้),
-> และกรอกข้อมูลผู้เช่าปัจจุบันของทุกห้อง + เลขมิเตอร์ล่าสุด (ดูข้อ 16)
+> และกรอกข้อมูลผู้เช่าปัจจุบันของทุกห้อง + เลขมิเตอร์ล่าสุดผ่านเมนูนำเข้าผู้เช่าเดิม (ดูข้อ 16)
 
 ---
 

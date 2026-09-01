@@ -161,6 +161,35 @@
     </form>
   </dialog>
 
+  <dialog id="import-tenant-dialog">
+    <form id="import-tenant-form" class="dialog-form">
+      <button class="dialog-close" type="button" data-close>×</button><p class="eyebrow">EXISTING TENANT</p><h3>นำเข้าผู้เช่าเดิม ห้อง <span data-room-number></span></h3>
+      <input name="roomId" type="hidden">
+      <div class="preview">ใช้สำหรับผู้เช่าที่อยู่มาก่อนเริ่มระบบ รายการนี้จะไม่สร้างบิลย้อนหลัง</div>
+      <label>ชื่อผู้เช่า<input name="name" required maxlength="200"></label>
+      <label>เบอร์โทร<input name="phone" maxlength="20"></label>
+      <div class="two"><label>วันเข้าอยู่จริง<input name="movedInAt" type="date" required></label><label>พักขั้นต่ำ (เดือน)<input name="minimumStayMonths" type="number" min="0" max="120" required></label></div>
+      <div class="two"><label>มัดจำที่ถืออยู่<input name="depositAmount" type="number" min="0" step="0.01" required></label><label>วันที่รับมัดจำ<input name="depositReceivedAt" type="date"></label></div>
+      <div class="dialog-section"><strong>เลขมิเตอร์ตั้งต้น</strong><span class="muted">กรอกเลขล่าสุดก่อนเริ่มคิดรอบใหม่ ระบบจะบันทึกหน่วยใช้เป็น 0</span></div>
+      <div class="two"><label>งวดมิเตอร์<input name="meterBillingPeriod" type="month" required></label><label>วันที่จด<input name="meterReadAt" type="date" required></label></div>
+      <div class="two"><label>เลขมิเตอร์น้ำ<input name="waterReading" type="number" min="0" step="0.01" required></label><label>เลขมิเตอร์ไฟ<input name="electricReading" type="number" min="0" step="0.01" required></label></div>
+      <button class="primary" type="submit">นำเข้าผู้เช่าเดิม</button>
+    </form>
+  </dialog>
+
+  <dialog id="edit-tenant-dialog">
+    <form id="edit-tenant-form" class="dialog-form">
+      <button class="dialog-close" type="button" data-close>×</button><p class="eyebrow">TENANT PROFILE</p><h3>แก้ข้อมูลห้อง <span data-room-number></span></h3>
+      <input name="tenantId" type="hidden">
+      <label>ชื่อผู้เช่า<input name="name" required maxlength="200"></label>
+      <label>เบอร์โทร<input name="phone" maxlength="20"></label>
+      <div class="two"><label>วันเข้าอยู่<input name="movedInAt" type="date" required></label><label>พักขั้นต่ำ (เดือน)<input name="minimumStayMonths" type="number" min="0" max="120" required></label></div>
+      <div class="two"><label>มัดจำที่ถืออยู่<input name="depositAmount" type="number" min="0" step="0.01" required></label><label>วันที่รับมัดจำ<input name="depositReceivedAt" type="date"></label></div>
+      <div class="preview">ถ้ามีบิลแล้ว ระบบจะไม่อนุญาตให้เปลี่ยนวันเข้าอยู่ แต่ยังแก้ชื่อ เบอร์โทร และมัดจำได้</div>
+      <button class="primary" type="submit">บันทึกข้อมูลผู้เช่า</button>
+    </form>
+  </dialog>
+
   <dialog id="edit-meter-dialog">
     <form id="edit-meter-form" class="dialog-form">
       <button class="dialog-close" type="button" data-close>×</button><p class="eyebrow">EDIT HISTORY</p><h3>แก้มิเตอร์ห้อง <span data-room-number></span></h3>
