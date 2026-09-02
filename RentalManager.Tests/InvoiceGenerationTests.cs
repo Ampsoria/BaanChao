@@ -338,11 +338,12 @@ public sealed class InvoiceGenerationTests
         Assert.Equal(933m, invoice.RentAmount);
         Assert.Equal(0m, invoice.TrashAmount);
 
-        // เลขมิเตอร์ตั้งต้นต้องกลายเป็น WaterPrev ของบิลใบถัดไป
-        var reading = await db.MeterReadings.SingleAsync(ct);
-        Assert.Equal("2026-09", reading.BillingPeriod);
-        Assert.Equal(100m, reading.WaterPrev);
-        Assert.Equal(100m, reading.WaterCurrent);
+        // เลขวันรับห้องเก็บแยกจากเลขสิ้นเดือน และจะเป็น WaterPrev ตอนจดมิเตอร์สิ้นเดือน
+        Assert.Empty(await db.MeterReadings.ToListAsync(ct));
+        var checkpoint = await db.MeterCheckpoints.SingleAsync(ct);
+        Assert.Equal(MeterCheckpointKinds.MoveIn, checkpoint.Kind);
+        Assert.Equal(100m, checkpoint.WaterReading);
+        Assert.Equal(500m, checkpoint.ElectricReading);
     }
 
     [Fact]

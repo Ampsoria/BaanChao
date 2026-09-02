@@ -18,6 +18,7 @@ public sealed class Tenant
     public string PreferredChannel { get; set; } = TenantChannels.Paper;
     public Room Room { get; set; } = null!;
     public List<Invoice> Invoices { get; set; } = [];
+    public List<MeterCheckpoint> MeterCheckpoints { get; set; } = [];
 }
 
 public static class TenantChannels

@@ -42,7 +42,9 @@ public sealed class MvcApiSmokeTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
         var home = await client.GetAsync("/", ct);
         Assert.Equal(HttpStatusCode.OK, home.StatusCode);
-        Assert.Contains("Amp Rental", await home.Content.ReadAsStringAsync(ct));
+        var homeHtml = await home.Content.ReadAsStringAsync(ct);
+        Assert.Contains("Amp Rental", homeHtml);
+        Assert.Contains("เลขมิเตอร์วันรับ–คืนห้อง", homeHtml);
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/admin/rooms", ct)).StatusCode);
         var login = await client.PostAsJsonAsync("/api/auth/login", new { username = "amp", password = "Test_Admin_2026" }, ct);

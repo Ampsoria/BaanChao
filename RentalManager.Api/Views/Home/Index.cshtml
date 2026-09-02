@@ -100,6 +100,10 @@
             <div class="table-wrap"><table><thead><tr><th>ห้อง/งวด</th><th>วันที่จด</th><th>น้ำ</th><th>ไฟ</th><th></th></tr></thead><tbody id="history-rows"></tbody></table></div>
           </div>
         </div>
+        <div class="panel" style="margin-top:18px">
+          <div class="section-head"><div><h3>เลขมิเตอร์วันรับ–คืนห้อง</h3><p class="muted">ใช้แยกหน่วยของผู้เช่าคนเก่า ช่วงห้องว่าง และผู้เช่าคนใหม่</p></div></div>
+          <div class="table-wrap"><table><thead><tr><th>ห้อง</th><th>ผู้เช่า</th><th>เหตุการณ์/วันที่</th><th>น้ำ</th><th>ไฟ</th></tr></thead><tbody id="checkpoint-rows"></tbody></table></div>
+        </div>
       </section>
 
       <section id="invoices-page" class="page hidden">
@@ -152,6 +156,7 @@
             <a class="primary" href="/api/admin/reports/invoices.csv">บิลทั้งหมด</a>
             <a class="secondary" href="/api/admin/reports/payments.csv">รายการรับเงิน</a>
             <a class="secondary" href="/api/admin/reports/meters.csv">ประวัติมิเตอร์</a>
+            <a class="secondary" href="/api/admin/reports/meter-checkpoints.csv">มิเตอร์วันรับ–คืนห้อง</a>
             <a class="secondary" href="/api/admin/reports/tenants.csv">ประวัติผู้เช่า</a>
             <a class="secondary" href="/api/admin/reports/settlements.csv">สรุปย้ายออก</a>
           </div>
@@ -230,7 +235,8 @@
       <label>เบอร์โทร<input name="phone" maxlength="20"></label>
       <label>วันย้ายเข้า<input name="movedInAt" type="date" required></label>
       <label>ช่องทางรับบิล<select name="preferredChannel"><option value="Paper">กระดาษ</option><option value="Line">LINE</option></select></label>
-      <div class="two"><label>มิเตอร์น้ำตั้งต้น<input name="waterReading" type="number" min="0" step="0.01" required></label><label>มิเตอร์ไฟตั้งต้น<input name="electricReading" type="number" min="0" step="0.01" required></label></div>
+      <div class="two"><label>มิเตอร์น้ำวันรับห้อง<input name="waterReading" type="number" min="0" step="0.01" required></label><label>มิเตอร์ไฟวันรับห้อง<input name="electricReading" type="number" min="0" step="0.01" required></label></div>
+      <p class="muted">อ่านเลขจากหน้ามิเตอร์ในวันส่งมอบจริง ระบบจะแยกหน่วยที่เพิ่มระหว่างห้องว่างออกให้</p>
       <div id="move-in-preview" class="preview">เลือกวันเพื่อดูยอด</div>
       <button class="primary" type="submit">ยืนยันการย้ายเข้า</button>
     </form>
@@ -242,6 +248,7 @@
       <input name="tenantId" type="hidden">
       <label>วันย้ายออก<input name="moveOutDate" type="date" required></label>
       <div class="two"><label>มิเตอร์น้ำวันออก<input name="waterFinal" type="number" min="0" step="0.01" required></label><label>มิเตอร์ไฟวันออก<input name="electricFinal" type="number" min="0" step="0.01" required></label></div>
+      <p class="muted">อ่านเลขจากหน้ามิเตอร์ตอนผู้เช่าคืนห้อง เลขนี้จะเป็นจุดเริ่มต้นของช่วงห้องว่าง</p>
       <div class="section-head"><p class="muted">ค่าเสียหาย (ถ้ามี)</p><button id="add-damage" class="secondary" type="button">+ เพิ่มรายการ</button></div>
       <div id="damage-list"></div>
       <div id="move-out-preview" class="preview">กรอกข้อมูลเพื่อดูยอดคืนหรือเก็บเพิ่ม</div>

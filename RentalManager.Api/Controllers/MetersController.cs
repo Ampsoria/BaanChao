@@ -33,6 +33,26 @@ public sealed class MetersController(RentalDbContext db, RentalOperationsService
         }).ToListAsync(ct));
     }
 
+    [HttpGet("checkpoints")]
+    public async Task<IActionResult> GetCheckpoints(int? roomId, CancellationToken ct)
+    {
+        var query = db.MeterCheckpoints.AsNoTracking().AsQueryable();
+        if (roomId.HasValue) query = query.Where(x => x.RoomId == roomId.Value);
+        return Ok(await query.OrderByDescending(x => x.RecordedAt)
+            .ThenByDescending(x => x.MeterCheckpointId).Select(x => new
+            {
+                x.MeterCheckpointId,
+                x.RoomId,
+                x.Room.RoomNumber,
+                x.TenantId,
+                x.Tenant.FullName,
+                x.RecordedAt,
+                x.Kind,
+                x.WaterReading,
+                x.ElectricReading
+            }).ToListAsync(ct));
+    }
+
     [HttpPost]
     public async Task<IActionResult> AddMeter(MeterReadingCommand command, CancellationToken ct) =>
         Ok(await service.AddMeterReadingAsync(command, UserName, ct));

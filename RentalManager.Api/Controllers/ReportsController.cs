@@ -73,6 +73,19 @@ public sealed class ReportsController(RentalDbContext db) : AdminControllerBase
             ["ReadingId", "Room", "BillingPeriod", "ReadAt", "WaterPrevious", "WaterCurrent", "WaterUnits", "ElectricPrevious", "ElectricCurrent", "ElectricUnits"], rows);
     }
 
+    [HttpGet("meter-checkpoints.csv")]
+    public async Task<IActionResult> MeterCheckpoints(CancellationToken ct)
+    {
+        var rows = await db.MeterCheckpoints.AsNoTracking().OrderBy(x => x.RecordedAt)
+            .ThenBy(x => x.Room.RoomNumber).Select(x => new object?[]
+            {
+                x.MeterCheckpointId, x.Room.RoomNumber, x.Tenant.FullName, x.RecordedAt,
+                x.Kind, x.WaterReading, x.ElectricReading
+            }).ToListAsync(ct);
+        return CsvFile("meter-checkpoints.csv",
+            ["CheckpointId", "Room", "Tenant", "RecordedAt", "Kind", "WaterReading", "ElectricReading"], rows);
+    }
+
     [HttpGet("tenants.csv")]
     public async Task<IActionResult> Tenants(CancellationToken ct)
     {

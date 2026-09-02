@@ -125,7 +125,16 @@ public sealed class RoomsController(RentalDbContext db) : AdminControllerBase
                 x.WaterCurrent,
                 x.ElectricCurrent,
                 x.BillingPeriod
-            }).FirstOrDefault()
+            }).FirstOrDefault(),
+            LatestCheckpoint = room.MeterCheckpoints.OrderByDescending(x => x.RecordedAt)
+                .ThenByDescending(x => x.MeterCheckpointId).Select(x => new
+                {
+                    x.RecordedAt,
+                    x.WaterReading,
+                    x.ElectricReading,
+                    x.Kind,
+                    x.TenantId
+                }).FirstOrDefault()
         }).ToListAsync(ct);
         return Ok(data);
     }

@@ -9,4 +9,5 @@ public sealed class Room
     public bool IsActive { get; set; } = true;
     public List<Tenant> Tenants { get; set; } = [];
     public List<MeterReading> MeterReadings { get; set; } = [];
+    public List<MeterCheckpoint> MeterCheckpoints { get; set; } = [];
 }

@@ -10,6 +10,7 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
     public DbSet<UtilityRate> UtilityRates => Set<UtilityRate>();
     public DbSet<BillingPolicy> BillingPolicies => Set<BillingPolicy>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
+    public DbSet<MeterCheckpoint> MeterCheckpoints => Set<MeterCheckpoint>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -31,6 +32,7 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
         ConfigureTenant(modelBuilder, sqlite);
         ConfigureRates(modelBuilder, sqlite);
         ConfigureMeterReading(modelBuilder, sqlite);
+        ConfigureMeterCheckpoint(modelBuilder, sqlite);
         ConfigureInvoice(modelBuilder, sqlite);
         ConfigurePayment(modelBuilder, sqlite);
         ConfigureAuditLog(modelBuilder, sqlite);
@@ -128,6 +130,27 @@ public sealed class RentalDbContext(DbContextOptions<RentalDbContext> options) :
             .HasComputedColumnSql("[ElectricCurrent] - [ElectricPrev]", stored: true);
         entity.HasIndex(x => new { x.RoomId, x.BillingPeriod }).IsUnique();
         entity.HasOne(x => x.Room).WithMany(x => x.MeterReadings).HasForeignKey(x => x.RoomId).OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static void ConfigureMeterCheckpoint(ModelBuilder modelBuilder, bool sqlite)
+    {
+        var entity = modelBuilder.Entity<MeterCheckpoint>();
+        entity.ToTable("MeterCheckpoint", table =>
+        {
+            table.HasCheckConstraint("CK_MeterCheckpoint_Water", $"{Money(sqlite, "[WaterReading]")} >= 0");
+            table.HasCheckConstraint("CK_MeterCheckpoint_Electric", $"{Money(sqlite, "[ElectricReading]")} >= 0");
+            table.HasCheckConstraint("CK_MeterCheckpoint_Kind", "[Kind] IN ('MoveIn','MoveOut','ImportedBaseline')");
+        });
+        entity.HasKey(x => x.MeterCheckpointId);
+        entity.Property(x => x.Kind).HasMaxLength(20).IsRequired();
+        entity.Property(x => x.WaterReading).HasPrecision(12, 2);
+        entity.Property(x => x.ElectricReading).HasPrecision(12, 2);
+        entity.HasIndex(x => new { x.RoomId, x.RecordedAt });
+        entity.HasIndex(x => new { x.TenantId, x.Kind }).IsUnique();
+        entity.HasOne(x => x.Room).WithMany(x => x.MeterCheckpoints)
+            .HasForeignKey(x => x.RoomId).OnDelete(DeleteBehavior.Restrict);
+        entity.HasOne(x => x.Tenant).WithMany(x => x.MeterCheckpoints)
+            .HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void ConfigureInvoice(ModelBuilder modelBuilder, bool sqlite)

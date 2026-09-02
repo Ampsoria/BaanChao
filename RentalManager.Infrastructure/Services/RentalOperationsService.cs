@@ -52,6 +52,16 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
         var quote = BillingCalculator.CalculateMoveIn(room.MonthlyRent, command.MovedInAt);
         var rate = await CurrentRateAsync(command.MovedInAt, cancellationToken);
         var period = command.MovedInAt.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+        var previousPoint = await LatestMeterPointAsync(room.RoomId, command.MovedInAt, cancellationToken);
+        if (previousPoint is not null &&
+            (command.WaterReading < previousPoint.WaterReading || command.ElectricReading < previousPoint.ElectricReading))
+            throw new RentalOperationException(
+                $"เลขวันย้ายเข้าต้องไม่น้อยกว่าเลขล่าสุดวันที่ {previousPoint.RecordedAt:yyyy-MM-dd}: "
+                + $"น้ำ {previousPoint.WaterReading:N2} ไฟ {previousPoint.ElectricReading:N2}");
+        var lastMoveOut = await db.MeterCheckpoints.AsNoTracking()
+            .Where(x => x.RoomId == room.RoomId && x.Kind == MeterCheckpointKinds.MoveOut && x.RecordedAt <= command.MovedInAt)
+            .OrderByDescending(x => x.RecordedAt).ThenByDescending(x => x.MeterCheckpointId)
+            .FirstOrDefaultAsync(cancellationToken);
         var tenant = new Tenant
         {
             RoomId = room.RoomId,
@@ -66,15 +76,14 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
         db.Tenants.Add(tenant);
         await db.SaveChangesAsync(cancellationToken);
 
-        db.MeterReadings.Add(new MeterReading
+        db.MeterCheckpoints.Add(new MeterCheckpoint
         {
             RoomId = room.RoomId,
-            BillingPeriod = period,
-            ReadAt = command.MovedInAt,
-            WaterPrev = command.WaterReading,
-            WaterCurrent = command.WaterReading,
-            ElectricPrev = command.ElectricReading,
-            ElectricCurrent = command.ElectricReading
+            TenantId = tenant.TenantId,
+            RecordedAt = command.MovedInAt,
+            Kind = MeterCheckpointKinds.MoveIn,
+            WaterReading = command.WaterReading,
+            ElectricReading = command.ElectricReading
         });
         db.Invoices.Add(new Invoice
         {
@@ -97,9 +106,16 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
         });
         AddAudit("Tenant", tenant.TenantId.ToString(CultureInfo.InvariantCulture), "MoveIn", null,
             $"Room {room.RoomNumber}, {command.MovedInAt:yyyy-MM-dd}", changedBy);
+        AddAudit("MeterCheckpoint", tenant.TenantId.ToString(CultureInfo.InvariantCulture), "MoveIn", null,
+            $"Water={command.WaterReading}, Electric={command.ElectricReading}", changedBy);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new OperationResult<int>(tenant.TenantId, $"ย้ายเข้าห้อง {room.RoomNumber} สำเร็จ ยอดวันส่งมอบ {quote.TotalDue:N2} บาท");
+        var vacancyMessage = lastMoveOut is null
+            ? string.Empty
+            : $" หน่วยช่วงห้องว่าง: น้ำ {command.WaterReading - lastMoveOut.WaterReading:N2}, "
+              + $"ไฟ {command.ElectricReading - lastMoveOut.ElectricReading:N2} (ไม่คิดผู้เช่า)";
+        return new OperationResult<int>(tenant.TenantId,
+            $"ย้ายเข้าห้อง {room.RoomNumber} สำเร็จ ยอดวันส่งมอบ {quote.TotalDue:N2} บาท.{vacancyMessage}");
     }
 
     public async Task<OperationResult<int>> ImportExistingTenantAsync(
@@ -159,6 +175,15 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
         };
         db.Tenants.Add(tenant);
         await db.SaveChangesAsync(cancellationToken);
+        db.MeterCheckpoints.Add(new MeterCheckpoint
+        {
+            RoomId = command.RoomId,
+            TenantId = tenant.TenantId,
+            RecordedAt = command.MeterReadAt,
+            Kind = MeterCheckpointKinds.ImportedBaseline,
+            WaterReading = command.WaterReading,
+            ElectricReading = command.ElectricReading
+        });
         if (existingBaseline is null)
             db.MeterReadings.Add(new MeterReading
             {
@@ -172,6 +197,8 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
             });
         AddAudit("Tenant", tenant.TenantId.ToString(CultureInfo.InvariantCulture), "ImportExisting", null,
             $"Room {room.RoomNumber}, Baseline {command.MeterBillingPeriod}", changedBy);
+        AddAudit("MeterCheckpoint", tenant.TenantId.ToString(CultureInfo.InvariantCulture), "ImportedBaseline", null,
+            $"Water={command.WaterReading}, Electric={command.ElectricReading}", changedBy);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new OperationResult<int>(tenant.TenantId,
@@ -192,14 +219,11 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
         if (existingReading is not null)
             throw new RentalOperationException(
                 $"ห้องนี้มีเลขมิเตอร์งวด {command.BillingPeriod} แล้ว (น้ำ {existingReading.WaterCurrent:N2} ไฟ {existingReading.ElectricCurrent:N2}) "
-                + "ถ้าเป็นห้องที่เพิ่งย้ายเข้าเดือนนี้ ให้แก้เลขปัจจุบันของแถวเดิมแทนการเพิ่มแถวใหม่");
+                + "กรุณาแก้เลขปัจจุบันของแถวเดิมแทนการเพิ่มแถวใหม่");
 
-        var previous = await db.MeterReadings.AsNoTracking()
-            .Where(x => x.RoomId == command.RoomId && x.ReadAt <= command.ReadAt)
-            .OrderByDescending(x => x.ReadAt).ThenByDescending(x => x.ReadingId)
-            .FirstOrDefaultAsync(cancellationToken)
+        var previous = await LatestMeterPointAsync(command.RoomId, command.ReadAt, cancellationToken)
             ?? throw new RentalOperationException("ยังไม่มีเลขมิเตอร์ตั้งต้น กรุณาบันทึกการย้ายเข้าก่อน");
-        if (command.WaterCurrent < previous.WaterCurrent || command.ElectricCurrent < previous.ElectricCurrent)
+        if (command.WaterCurrent < previous.WaterReading || command.ElectricCurrent < previous.ElectricReading)
             throw new RentalOperationException("เลขมิเตอร์ใหม่ต้องไม่น้อยกว่าครั้งก่อน กรุณาตรวจสอบมิเตอร์วนรอบหรือการเปลี่ยนมิเตอร์");
 
         var reading = new MeterReading
@@ -207,9 +231,9 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
             RoomId = command.RoomId,
             BillingPeriod = command.BillingPeriod,
             ReadAt = command.ReadAt,
-            WaterPrev = previous.WaterCurrent,
+            WaterPrev = previous.WaterReading,
             WaterCurrent = command.WaterCurrent,
-            ElectricPrev = previous.ElectricCurrent,
+            ElectricPrev = previous.ElectricReading,
             ElectricCurrent = command.ElectricCurrent
         };
         db.MeterReadings.Add(reading);
@@ -343,8 +367,19 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
         };
         context.Tenant.MovedOutAt = command.MoveOutDate;
         db.MoveOutSettlements.Add(settlement);
+        db.MeterCheckpoints.Add(new MeterCheckpoint
+        {
+            RoomId = context.Tenant.RoomId,
+            TenantId = context.Tenant.TenantId,
+            RecordedAt = command.MoveOutDate,
+            Kind = MeterCheckpointKinds.MoveOut,
+            WaterReading = command.WaterFinal,
+            ElectricReading = command.ElectricFinal
+        });
         AddAudit("Tenant", command.TenantId.ToString(CultureInfo.InvariantCulture), "MoveOut", null,
             command.MoveOutDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), changedBy);
+        AddAudit("MeterCheckpoint", command.TenantId.ToString(CultureInfo.InvariantCulture), "MoveOut", null,
+            $"Water={command.WaterFinal}, Electric={command.ElectricFinal}", changedBy);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new OperationResult<int>(settlement.SettlementId,
@@ -363,8 +398,7 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
         if (tenant.MovedOutAt != null)
             throw new RentalOperationException("ผู้เช่ารายนี้ย้ายออกแล้ว");
         var rate = await CurrentRateAsync(command.MoveOutDate, cancellationToken);
-        var meter = await db.MeterReadings.AsNoTracking().Where(x => x.RoomId == tenant.RoomId && x.ReadAt <= command.MoveOutDate)
-            .OrderByDescending(x => x.ReadAt).ThenByDescending(x => x.ReadingId).FirstOrDefaultAsync(cancellationToken)
+        var meter = await LatestMeterPointAsync(tenant.RoomId, command.MoveOutDate, cancellationToken)
             ?? throw new RentalOperationException("ไม่พบเลขมิเตอร์ครั้งก่อน");
         var invoiceTotals = await db.Invoices.AsNoTracking().Where(x => x.TenantId == tenant.TenantId && x.Status != InvoiceStatus.Void)
             .Select(x => new { x.InvoiceId, x.TotalAmount }).ToListAsync(cancellationToken);
@@ -382,9 +416,29 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
             ? throw new RentalOperationException("รายละเอียดค่าเสียหายต้องไม่เกิน 200 และ path รูปไม่เกิน 500 ตัวอักษร")
             : BillingCalculator.CalculateMoveOut(
             context.Tenant.MovedInAt, command.MoveOutDate, context.Tenant.MinimumStayMonths,
-            context.Tenant.DepositAmount, context.Meter.WaterCurrent, command.WaterFinal,
-            context.Meter.ElectricCurrent, command.ElectricFinal, context.Rate.WaterPerUnit,
+            context.Tenant.DepositAmount, context.Meter.WaterReading, command.WaterFinal,
+            context.Meter.ElectricReading, command.ElectricFinal, context.Rate.WaterPerUnit,
             context.Rate.ElectricPerUnit, context.Outstanding, command.Deductions);
+
+    private async Task<MeterPoint?> LatestMeterPointAsync(
+        int roomId, DateOnly onOrBefore, CancellationToken cancellationToken)
+    {
+        var monthly = await db.MeterReadings.AsNoTracking()
+            .Where(x => x.RoomId == roomId && x.ReadAt <= onOrBefore)
+            .OrderByDescending(x => x.ReadAt).ThenByDescending(x => x.ReadingId)
+            .Select(x => new MeterPoint(x.ReadAt, x.WaterCurrent, x.ElectricCurrent))
+            .FirstOrDefaultAsync(cancellationToken);
+        var checkpoint = await db.MeterCheckpoints.AsNoTracking()
+            .Where(x => x.RoomId == roomId && x.RecordedAt <= onOrBefore)
+            .OrderByDescending(x => x.RecordedAt).ThenByDescending(x => x.MeterCheckpointId)
+            .Select(x => new MeterPoint(x.RecordedAt, x.WaterReading, x.ElectricReading))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (monthly is null) return checkpoint;
+        if (checkpoint is null) return monthly;
+        // วันเดียวกันให้ checkpoint ชนะ เพราะเป็นเลข ณ เวลารับ/คืนห้องที่เฉพาะเจาะจงกว่า
+        return checkpoint.RecordedAt >= monthly.RecordedAt ? checkpoint : monthly;
+    }
 
     private async Task<UtilityRate> CurrentRateAsync(DateOnly date, CancellationToken cancellationToken) =>
         await db.UtilityRates.AsNoTracking().Where(x => x.EffectiveFrom <= date)
@@ -415,7 +469,8 @@ public sealed partial class RentalOperationsService(RentalDbContext db, IOptions
             throw new RentalOperationException("งวดบิลต้องอยู่ในรูปแบบ YYYY-MM");
     }
 
-    private sealed record MoveOutContext(Tenant Tenant, UtilityRate Rate, MeterReading Meter, decimal Outstanding);
+    private sealed record MeterPoint(DateOnly RecordedAt, decimal WaterReading, decimal ElectricReading);
+    private sealed record MoveOutContext(Tenant Tenant, UtilityRate Rate, MeterPoint Meter, decimal Outstanding);
 
     [GeneratedRegex(@"^\d{4}-(0[1-9]|1[0-2])$")]
     private static partial Regex BillingPeriodRegex();

@@ -67,6 +67,7 @@ WITH MOVE N'$RENTAL_DATABASE_NAME' TO N'$data_file',
      CHECKSUM, RECOVERY;
 IF OBJECT_ID(N'[$test_database].dbo.Room', N'U') IS NULL
    OR OBJECT_ID(N'[$test_database].dbo.MeterReading', N'U') IS NULL
+   OR OBJECT_ID(N'[$test_database].dbo.MeterCheckpoint', N'U') IS NULL
    OR OBJECT_ID(N'[$test_database].dbo.Invoice', N'U') IS NULL
    OR OBJECT_ID(N'[$test_database].dbo.Payment', N'U') IS NULL
     THROW 51010, 'Restore completed but required tables are missing.', 1;
@@ -76,6 +77,7 @@ SELECT
   (SELECT COUNT(*) FROM [$test_database].dbo.Room) AS Rooms,
   (SELECT COUNT(*) FROM [$test_database].dbo.Tenant) AS Tenants,
   (SELECT COUNT(*) FROM [$test_database].dbo.MeterReading) AS MeterReadings,
+  (SELECT COUNT(*) FROM [$test_database].dbo.MeterCheckpoint) AS MeterCheckpoints,
   (SELECT COUNT(*) FROM [$test_database].dbo.Invoice) AS Invoices,
   (SELECT COUNT(*) FROM [$test_database].dbo.Payment) AS Payments;"
 

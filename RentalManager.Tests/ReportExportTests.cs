@@ -72,4 +72,40 @@ public sealed class ReportExportTests
         Assert.Contains("\"-25.00\"", text);
         Assert.DoesNotContain("\"'-25.00\"", text);
     }
+
+    [Fact]
+    public async Task MeterCheckpointCsv_ExportsMoveInAndMoveOutBoundaries()
+    {
+        await using var db = new RentalDbContext(new DbContextOptionsBuilder<RentalDbContext>()
+            .UseInMemoryDatabase($"report-{Guid.NewGuid():N}").Options);
+        db.Database.EnsureCreated();
+        var tenant = new Tenant
+        {
+            RoomId = 1,
+            FullName = "ผู้เช่า",
+            MovedInAt = new DateOnly(2026, 1, 1),
+            DepositAmount = 1_800m
+        };
+        db.Tenants.Add(tenant);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.MeterCheckpoints.Add(new MeterCheckpoint
+        {
+            RoomId = 1,
+            TenantId = tenant.TenantId,
+            RecordedAt = new DateOnly(2026, 9, 1),
+            Kind = MeterCheckpointKinds.MoveOut,
+            WaterReading = 520m,
+            ElectricReading = 8_958m
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await new ReportsController(db).MeterCheckpoints(TestContext.Current.CancellationToken);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        var text = Encoding.UTF8.GetString(file.FileContents[3..]);
+        Assert.Contains("\"MoveOut\"", text);
+        Assert.Contains("\"520.00\"", text);
+        Assert.Contains("\"8958.00\"", text);
+        Assert.Equal("meter-checkpoints.csv", file.FileDownloadName);
+    }
 }

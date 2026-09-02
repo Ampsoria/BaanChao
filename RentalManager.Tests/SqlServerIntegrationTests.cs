@@ -61,6 +61,8 @@ public sealed class SqlServerIntegrationTests
         Assert.Equal(6, await db.Rooms.CountAsync(ct));
         Assert.Equal(1, await db.Database.SqlQueryRaw<int>(
             "SELECT COUNT(*) AS [Value] FROM sys.views WHERE name = 'vw_InvoiceStatus'").SingleAsync(ct));
+        Assert.Equal(1, await db.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) AS [Value] FROM sys.tables WHERE name = 'MeterCheckpoint'").SingleAsync(ct));
         Assert.Equal(3, await db.Database.SqlQueryRaw<int>(
             "SELECT COUNT(*) AS [Value] FROM sys.procedures WHERE name IN ('sp_GenerateMonthlyInvoices','sp_CreateMoveInInvoice','sp_CreateMoveOutSettlement')").SingleAsync(ct));
 
